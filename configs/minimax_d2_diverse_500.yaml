@@ -1,0 +1,18 @@
+# Five hundred varied teacher games. Random opening moves create diverse legal
+# positions but are not recorded; both recorded players are minimax depth 2.
+seed: 42
+
+generation:
+  dataset_path: data/datasets/minimax_d2_diverse_500.pt
+  pgn_dir: data/games/minimax_d2_diverse_500
+  games: 500
+  white_agent: minimax
+  black_agent: minimax
+  white_depth: 2
+  black_depth: 2
+  random_opening_min_plies: 8
+  random_opening_max_plies: 12
+  deduplicate_positions: true
+  max_moves: 300
+  save_every_games: 5
+  resume: true

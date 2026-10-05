@@ -1,0 +1,28 @@
+# Run only after gen2_mixed_d1_d2_400.yaml completes all 400 games.
+seed: 2026
+device: cuda
+
+training:
+  dataset_path: data/datasets/gen2_mixed_d1_d2_400.pt
+  checkpoint_dir: checkpoints/gen2_mixed_d1_d2_400_candidate_v1
+  metrics_path: data/metrics/gen2_mixed_d1_d2_400_candidate_v1.jsonl
+  batch_size: 64
+  epochs: 5
+  learning_rate: 0.000001
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: false
+  legal_policy_mask: true
+
+  # NeuralAgent is currently policy-only. Gameplay, not validation loss, will
+  # choose among all retained epoch checkpoints after training.
+  policy_loss_weight: 1.0
+  value_loss_weight: 0.0
+
+  # Keep all eight games from one opening in one split, sample games evenly,
+  # then apply the winner/draw/loser actor weight stored during collection.
+  validation_group_key: opening_set_id
+  game_balanced_sampling: true
+  sample_weight_key: actor_outcome_weight
+  log_every: 20

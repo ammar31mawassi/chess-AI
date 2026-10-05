@@ -1,0 +1,42 @@
+# Offline collection only: 500 shared opening sets, three pairings, and both
+# Agent-A colors. This produces exactly 500 * 3 * 2 = 3,000 complete games.
+seed: 2026
+device: cpu
+
+mixed_batch:
+  experiment: minimax_league
+  neural_checkpoint: null
+
+  state_path: data/curricula/minimax_d1_d2_d3_3000/state.json
+  manifest_path: data/curricula/minimax_d1_d2_d3_3000/manifest.json
+  dataset_path: data/datasets/minimax_d1_d2_d3_3000.pt
+  opening_dataset_dir: data/curricula/minimax_d1_d2_d3_3000/openings
+  pgn_dir: data/games/minimax_d1_d2_d3_3000
+
+  opening_positions: 500
+  minimax_d1_depth: 1
+  minimax_d2_depth: 2
+  minimax_d3_depth: 3
+  teacher_depth: 3
+  max_plies: 200
+
+  # The other 450 sets receive 2-5 complete random legal moves (4-10 plies).
+  # Every tenth set is a normal-start anchor, giving 50 anchors in total.
+  opening_min_full_moves: 2
+  opening_max_full_moves: 5
+  normal_start_every_positions: 10
+
+  # Independent D3 scores every legal root move. The strongest five moves form
+  # the soft training policy. Repeated positions inside a six-game set reuse a
+  # cached D3 analysis.
+  teacher_policy_temperature: 100.0
+  teacher_policy_top_k: 5
+
+  # Applied to the actor at each stored position.
+  win_weight: 2.0
+  draw_weight: 1.5
+  loss_weight: 1.0
+
+  # Variation is reproducible and occurs only between equally scored best moves.
+  minimax_random_tie_breaks: true
+  resume: true

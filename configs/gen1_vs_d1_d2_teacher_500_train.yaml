@@ -1,0 +1,29 @@
+# Offline policy-only candidate training from the frozen generation-1 champion.
+# Run this only after gen1_vs_d1_d2_teacher_500.yaml finishes all 500 games.
+seed: 2026
+device: cuda
+
+training:
+  dataset_path: data/datasets/gen1_vs_d1_d2_teacher_500.pt
+  checkpoint_dir: checkpoints/gen1_vs_d1_d2_teacher_500_candidate_v1
+  metrics_path: data/metrics/gen1_vs_d1_d2_teacher_500_candidate_v1.jsonl
+  batch_size: 64
+  epochs: 3
+  learning_rate: 0.000002
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: true
+  legal_policy_mask: true
+
+  # The current NeuralAgent plays from policy only. Value targets remain in the
+  # dataset for a later search stage but do not update the shared trunk here.
+  policy_loss_weight: 1.0
+  value_loss_weight: 0.0
+
+  # Both color-swapped games from one opening stay in the same split. Training
+  # samples games evenly before applying the 2x champion-win example weight.
+  validation_group_key: opening_pair_id
+  game_balanced_sampling: true
+  sample_weight_key: champion_outcome_weight
+  log_every: 20

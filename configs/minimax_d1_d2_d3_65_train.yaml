@@ -1,0 +1,21 @@
+seed: 2029
+device: cuda
+
+training:
+  dataset_path: data/datasets/minimax_d1_d2_d3_3000.pt
+  checkpoint_dir: checkpoints/minimax_d1_d2_d3_65_candidate_v1
+  metrics_path: data/metrics/minimax_d1_d2_d3_65_candidate_v1.jsonl
+  batch_size: 64
+  epochs: 3
+  learning_rate: 0.0000005
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: false
+  legal_policy_mask: true
+  policy_loss_weight: 1.0
+  value_loss_weight: 0.25
+  validation_group_key: opening_set_id
+  game_balanced_sampling: true
+  sample_weight_key: actor_outcome_weight
+  log_every: 20

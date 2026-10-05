@@ -1,0 +1,23 @@
+# Gameplay-first provisional epoch selection. This suite is separate from both
+# training openings and the later final promotion audits.
+seed: 9700205
+device: cuda
+
+gameplay_selection:
+  champion_checkpoint: checkpoints/gen1_vs_d1_d2_teacher_500_candidate_v1/epoch_0002.pt
+  candidate_checkpoint_dir: checkpoints/gen2_mixed_d1_d2_400_candidate_v1
+  training_manifest: data/curricula/gen2_mixed_d1_d2_400/manifest.json
+  report_path: data/games/evaluation/gen2_mixed_d1_d2_400_selection/report.json
+  pgn_dir: data/games/evaluation/gen2_mixed_d1_d2_400_selection
+
+  opponent_depths: [1, 2]
+  openings: 10
+  opening_min_full_moves: 2
+  opening_max_full_moves: 3
+  max_plies: 200
+
+  # An epoch must beat the champion in aggregate while never losing total or
+  # standard-start score against either individual opponent depth.
+  minimum_aggregate_improvement_points: 0.5
+  require_depth_non_regression: true
+  require_standard_non_regression: true

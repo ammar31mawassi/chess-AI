@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+dist/
+build/
+
+# Generated local artifacts (keep directory marker files only).
+data/games/*
+!data/games/.gitkeep
+data/datasets/*
+!data/datasets/.gitkeep
+data/metrics/*
+!data/metrics/.gitkeep
+data/gui_sessions/*
+!data/gui_sessions/.gitkeep
+data/curricula/
+data/opening_books/
+checkpoints/*
+!checkpoints/.gitkeep
+
+# External datasets are local inputs and can be several gigabytes.
+downloaded_datasets/
+
+# Shallow third-party research checkouts. Keep only our local catalog tracked.
+references/github/*/
+references/github-clone-failures/

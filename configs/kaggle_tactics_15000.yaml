@@ -1,0 +1,10 @@
+seed: 2028
+
+kaggle_import:
+  kind: tactics
+  source_path: downloaded_datasets/Evals/tactic_evals.csv
+  output_path: data/datasets/kaggle_tactics_15000.pt
+  target_examples: 15000
+  max_source_rows: 1000000
+  centipawn_scale: 400.0
+  evaluation_perspective: side_to_move

@@ -1,0 +1,17 @@
+# Conservative fresh fine-tune from the current champion. The command must
+# supply --init-checkpoint; this file writes to a new candidate directory.
+seed: 42
+device: cuda
+
+training:
+  dataset_path: data/datasets/minimax_d2_vs_random_teacher_500.pt
+  checkpoint_dir: checkpoints/minimax_d2_vs_random_teacher_500_v1
+  metrics_path: data/metrics/minimax_d2_vs_random_teacher_500_v1.jsonl
+  batch_size: 64
+  epochs: 5
+  learning_rate: 0.00005
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: true
+  log_every: 20

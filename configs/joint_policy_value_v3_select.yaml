@@ -1,0 +1,19 @@
+# Gameplay-first epoch selection. This suite is provisional and separate from
+# the fresh-seed paired audits used for a final promotion decision.
+seed: 9920205
+device: cuda
+
+gameplay_selection:
+  champion_checkpoint: checkpoints/gen1_vs_d1_d2_teacher_500_candidate_v1/epoch_0002.pt
+  candidate_checkpoint_dir: checkpoints/joint_policy_value_v3
+  training_manifest: data/curricula/gen1_vs_d1_d2_teacher_500/manifest.json
+  report_path: data/games/evaluation/joint_policy_value_v3_selection/report.json
+  pgn_dir: data/games/evaluation/joint_policy_value_v3_selection
+  opponent_depths: [1, 2]
+  openings: 10
+  opening_min_full_moves: 2
+  opening_max_full_moves: 5
+  max_plies: 200
+  minimum_aggregate_improvement_points: 0.5
+  require_depth_non_regression: true
+  require_standard_non_regression: true

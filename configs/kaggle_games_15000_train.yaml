@@ -1,0 +1,19 @@
+seed: 2027
+device: cuda
+
+training:
+  dataset_path: data/datasets/kaggle_games_15000.pt
+  checkpoint_dir: checkpoints/kaggle_games_15000_candidate_v1
+  metrics_path: data/metrics/kaggle_games_15000_candidate_v1.jsonl
+  batch_size: 64
+  epochs: 2
+  learning_rate: 0.000001
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: false
+  legal_policy_mask: true
+  policy_loss_weight: 1.0
+  value_loss_weight: 0.25
+  game_balanced_sampling: true
+  log_every: 20

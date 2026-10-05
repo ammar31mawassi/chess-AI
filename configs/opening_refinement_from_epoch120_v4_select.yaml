@@ -1,0 +1,19 @@
+# A v4 epoch must beat the original audited champion across D1 and D2 while
+# recovering its normal-start score. Selection remains provisional.
+seed: 9960205
+device: cuda
+
+gameplay_selection:
+  champion_checkpoint: checkpoints/gen1_vs_d1_d2_teacher_500_candidate_v1/epoch_0002.pt
+  candidate_checkpoint_dir: checkpoints/opening_refinement_from_epoch120_v4
+  training_manifest: data/curricula/gen1_vs_d1_d2_teacher_500/manifest.json
+  report_path: data/games/evaluation/opening_refinement_from_epoch120_v4_selection/report.json
+  pgn_dir: data/games/evaluation/opening_refinement_from_epoch120_v4_selection
+  opponent_depths: [1, 2]
+  openings: 10
+  opening_min_full_moves: 2
+  opening_max_full_moves: 5
+  max_plies: 200
+  minimum_aggregate_improvement_points: 0.5
+  require_depth_non_regression: true
+  require_standard_non_regression: true

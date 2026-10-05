@@ -1,0 +1,36 @@
+# Offline collection only: 250 seeded openings, each played twice with colors
+# reversed, for exactly 500 complete champion-vs-D1 games. D2 annotates every
+# played position after the short random opening; no optimizer exists here.
+seed: 2026
+device: cuda
+
+teacher_batch:
+  champion_checkpoint: checkpoints/d1_gated_from_epoch399/champions/generation_0001.pt
+
+  state_path: data/curricula/gen1_vs_d1_d2_teacher_500/state.json
+  manifest_path: data/curricula/gen1_vs_d1_d2_teacher_500/manifest.json
+  dataset_path: data/datasets/gen1_vs_d1_d2_teacher_500.pt
+  pair_dataset_dir: data/curricula/gen1_vs_d1_d2_teacher_500/pairs
+  pgn_dir: data/games/gen1_vs_d1_d2_teacher_500
+
+  opening_pairs: 250
+  opponent_depth: 1
+  teacher_depth: 2
+  max_plies: 200
+
+  # Full moves, not plies: every opening contains exactly four or six random
+  # legal plies, then the champion and D1 play an otherwise ordinary game.
+  opening_min_full_moves: 2
+  opening_max_full_moves: 3
+
+  # D2 scores every legal root move exactly. The five strongest scores become
+  # a soft policy target; 100 centipawn-like units is one softmax temperature.
+  teacher_policy_temperature: 100.0
+  teacher_policy_top_k: 5
+
+  # Win weighting affects later training only. Losses remain fully represented.
+  champion_win_weight: 2.0
+  champion_draw_weight: 1.0
+  champion_loss_weight: 1.0
+
+  resume: true

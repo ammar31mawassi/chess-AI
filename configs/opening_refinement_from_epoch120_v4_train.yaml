@@ -1,0 +1,29 @@
+seed: 2034
+device: cuda
+
+training:
+  dataset_path: data/datasets/opening_refinement_from_epoch120_v4.pt
+  checkpoint_dir: checkpoints/opening_refinement_from_epoch120_v4
+  metrics_path: data/metrics/opening_refinement_from_epoch120_v4.jsonl
+  batch_size: 64
+  epochs: 100
+  learning_rate: 0.0000005
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: true
+  legal_policy_mask: true
+
+  # Opening policy is primary. The source win/draw rates provide bounded value
+  # targets, while a small value coefficient protects PUCT behaviour.
+  policy_loss_weight: 1.0
+  value_loss_weight: 0.1
+  selection_metric: validation_loss
+  early_stopping_patience: 20
+  early_stopping_min_delta: 0.00005
+  checkpoint_every: 5
+  baseline_eligible: true
+
+  validation_group_key: composition_group_id
+  sample_weight_key: opening_training_weight
+  log_every: 50

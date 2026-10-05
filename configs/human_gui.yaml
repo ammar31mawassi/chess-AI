@@ -1,0 +1,17 @@
+# Conservative fine-tuning settings for explicitly confirmed GUI games.
+# Supply the source model with: --init-checkpoint checkpoints/.../best.pt
+seed: 42
+device: auto
+
+training:
+  dataset_path: data/datasets/human_gui.pt
+  checkpoint_dir: checkpoints/human_finetune
+  metrics_path: data/metrics/human_finetune.jsonl
+  batch_size: 16
+  epochs: 5
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: false
+  log_every: 5

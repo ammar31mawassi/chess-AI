@@ -1,0 +1,10 @@
+seed: 2026
+
+kaggle_import:
+  kind: evaluations
+  source_path: downloaded_datasets/Evals/chessData.csv
+  output_path: data/datasets/kaggle_value_15000.pt
+  target_examples: 15000
+  max_source_rows: 2000000
+  centipawn_scale: 400.0
+  evaluation_perspective: side_to_move

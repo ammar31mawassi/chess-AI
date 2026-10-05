@@ -1,0 +1,17 @@
+# Named-opening rehearsal layered on top of the complete v3 replay.
+composition:
+  output_path: data/datasets/opening_refinement_from_epoch120_v4.pt
+  output_weight_key: opening_training_weight
+  sources:
+    # Retain the policy/value, tactical, D1/D2, and D3 knowledge from v3.
+    - name: joint_v3_replay
+      path: data/datasets/joint_policy_value_v3.pt
+      metadata_weight_key: joint_training_weight
+      group_key: composition_group_id
+
+    # Soft continuations aggregate all compatible named opening lines and are
+    # weighted by the source's game frequencies.
+    - name: named_opening_theory
+      path: data/datasets/all_chess_openings_v1.pt
+      metadata_weight_key: opening_frequency_weight
+      group_key: game_id

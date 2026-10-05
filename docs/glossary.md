@@ -1,0 +1,23 @@
+# Glossary
+
+- **Action space**: the fixed list of 4,208 move identities predicted by the policy head.
+- **Alpha-beta pruning**: skipping minimax branches that cannot change the chosen result.
+- **Batch**: examples processed in one optimizer update.
+- **Checkpoint**: versioned model weights plus architecture and optional training state.
+- **Epoch**: one pass through the training subset.
+- **FEN**: a compact text description of one chess position and its rule-relevant state.
+- **Feature map**: one learned 8 by 8 channel produced by a convolution.
+- **Gradient**: the sensitivity of loss to a trainable parameter.
+- **Inference**: using fixed weights to predict policy/value outputs.
+- **JSONL**: one JSON object per line, convenient for append-only metrics.
+- **Logit**: an unnormalized policy score before softmax.
+- **Negamax**: symmetric minimax written using score negation when turns change.
+- **PGN**: the standard text representation of a chess game and its metadata.
+- **Policy**: a distribution or preference over candidate moves.
+- **Residual block**: transformations plus a shortcut that adds the original features.
+- **Seed**: a number used to reproduce pseudo-random choices.
+- **Supervised bootstrap**: learning labels produced by an existing agent before self-play RL exists.
+- **Tensor**: a multidimensional array of numbers.
+- **UCI move**: coordinate notation such as `e2e4` or promotion `e7e8q`.
+- **Value**: predicted outcome for the player to move, approximately between -1 and 1.
+- **Validation set**: held-out complete games used to estimate generalization during training.

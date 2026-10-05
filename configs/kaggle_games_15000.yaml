@@ -1,0 +1,11 @@
+seed: 2027
+
+kaggle_import:
+  kind: games
+  source_path: downloaded_datasets/LiChess_Games/chess_games.csv
+  output_path: data/datasets/kaggle_games_15000.pt
+  target_examples: 15000
+  max_source_rows: 500000
+  minimum_elo: 2000
+  minimum_base_seconds: 600
+  positions_per_game: 4

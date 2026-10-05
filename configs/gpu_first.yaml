@@ -1,0 +1,35 @@
+seed: 42
+device: cuda
+
+model:
+  channels: 32
+  residual_blocks: 2
+
+generation:
+  games: 10
+  white_agent: minimax
+  black_agent: random
+  minimax_depth: 1
+  max_moves: 80
+  max_examples: 800
+  save_every_games: 2
+  dataset_path: data/datasets/gpu_first.pt
+
+training:
+  dataset_path: data/datasets/gpu_first.pt
+  checkpoint_dir: checkpoints/gpu_first
+  metrics_path: data/metrics/gpu_first.jsonl
+  batch_size: 32
+  epochs: 10
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: false
+  log_every: 5
+
+arena:
+  games: 10
+  minimax_depth: 1
+  max_moves: 200
+  pgn_dir: data/games/gpu_first

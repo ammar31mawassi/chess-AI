@@ -1,0 +1,9 @@
+# Explicit conversion of the downloaded named-opening lines. The compiler
+# produces both neural soft targets and the exact runtime continuation book.
+opening_import:
+  source_path: downloaded_datasets/openings/openings.csv
+  dataset_path: data/datasets/all_chess_openings_v1.pt
+  book_path: data/opening_books/all_chess_openings_v1.json
+  minimum_games: 1
+  # The downloaded source's longest line is 28 plies; 32 preserves every line.
+  maximum_plies: 32

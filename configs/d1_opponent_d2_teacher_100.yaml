@@ -1,0 +1,55 @@
+# 100 seeded opening pairs = exactly 200 saved games. To continue later, keep
+# this file unchanged and pass --cycles 200 (a total target, not 200 more).
+# Cycles 1-99 each
+# collect two D2 corrections and train one small update. Cycle 100 is held out
+# so the final reported checkpoint is the checkpoint that played the final pair.
+seed: 2026
+device: cuda
+
+teacher_cycle:
+  source_checkpoint: checkpoints/minimax_d2_diverse_500_v1/best.pt
+  replay_dataset_path: data/datasets/minimax_d2_diverse_500.pt
+
+  state_path: data/curricula/d1_opponent_d2_teacher_100/state.json
+  corrections_dir: data/curricula/d1_opponent_d2_teacher_100/corrections
+  checkpoint_dir: checkpoints/d1_opponent_d2_teacher_100
+  metrics_path: data/metrics/d1_opponent_d2_teacher_100.jsonl
+  pgn_dir: data/games/d1_opponent_d2_teacher_100
+
+  cycles: 100 # may be overridden upward with --cycles
+  opponent_depth: 1
+  teacher_depth: 2
+  max_plies: 200
+
+  # Every pair starts from the same position, once per student color. The next
+  # pair receives a different reproducible even-length random opening.
+  opening_min_plies: 4
+  opening_max_plies: 8
+  # Refinement after the initial 400 cycles: every fifth pair is a direct
+  # normal-start test/correction in both colors. Other pairs stay diverse.
+  normal_start_every_cycles: 5
+
+  # Keep repeated standard-position corrections across anchor cycles and
+  # reserve 25% of each correction batch for them (about 5% of the full update
+  # at correction_fraction 0.20). After each trained anchor, save a fresh
+  # two-color standard-start regression pair; those games are evaluation only.
+  anchor_correction_share: 0.25
+  evaluate_after_normal_start: true
+
+  # A small replay mixture protects earlier D2 knowledge while giving the new
+  # teacher corrections 20% of each update. No validation positions are reused
+  # as a promotion claim; gameplay is the gate.
+  training_examples_per_cycle: 4096
+  correction_fraction: 0.20
+  batch_size: 64
+  learning_rate: 0.00001
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  policy_loss_weight: 1.0
+  value_loss_weight: 0.1
+  legal_policy_mask: true
+
+  # This stage never auto-promotes. It reports ready only after winning both
+  # colors across five consecutive, different seeded openings.
+  mastery_window_cycles: 5
+  resume: true

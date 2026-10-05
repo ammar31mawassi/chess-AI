@@ -1,0 +1,36 @@
+# Tiny settings intended to prove that every pipeline stage works quickly.
+seed: 7
+device: cpu
+
+model:
+  channels: 32
+  residual_blocks: 2
+
+generation:
+  games: 2
+  white_agent: minimax
+  black_agent: random
+  minimax_depth: 1
+  max_moves: 30
+  max_examples: 64
+  save_every_games: 1
+  dataset_path: data/datasets/dev_examples.pt
+
+training:
+  dataset_path: data/datasets/dev_examples.pt
+  checkpoint_dir: checkpoints/dev
+  metrics_path: data/metrics/dev_training.jsonl
+  batch_size: 8
+  epochs: 1
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+  validation_fraction: 0.25
+  scheduler: false
+  log_every: 1
+
+arena:
+  games: 2
+  minimax_depth: 1
+  max_moves: 40
+  pgn_dir: data/games/arena

@@ -1,0 +1,23 @@
+seed: 2030
+device: cuda
+
+training:
+  dataset_path: data/datasets/kaggle_value_15000.pt
+  checkpoint_dir: checkpoints/kaggle_value_patience_v2
+  metrics_path: data/metrics/kaggle_value_patience_v2.jsonl
+  batch_size: 64
+  epochs: 200
+  learning_rate: 0.000002
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: true
+  legal_policy_mask: true
+  policy_loss_weight: 0.0
+  value_loss_weight: 1.0
+  selection_metric: validation_value_loss
+  early_stopping_patience: 30
+  early_stopping_min_delta: 0.0001
+  checkpoint_every: 10
+  baseline_eligible: true
+  log_every: 20

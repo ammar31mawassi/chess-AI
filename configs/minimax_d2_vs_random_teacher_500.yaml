@@ -1,0 +1,19 @@
+# One standard depth-2 anchor game preserves the known opening line. The
+# remaining games alternate minimax depth 2 against Random, but only minimax
+# moves become policy labels. Every complete source game is archived as PGN.
+seed: 42
+
+generation:
+  dataset_path: data/datasets/minimax_d2_vs_random_teacher_500.pt
+  pgn_dir: data/games/minimax_d2_vs_random_teacher_500
+  games: 500
+  white_agent: minimax
+  black_agent: random
+  minimax_depth: 2
+  alternate_agents: true
+  record_agent: minimax
+  anchor_minimax_games: 1
+  deduplicate_positions: true
+  max_moves: 200
+  save_every_games: 5
+  resume: true

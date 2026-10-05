@@ -1,0 +1,30 @@
+seed: 2032
+device: cuda
+
+training:
+  dataset_path: data/datasets/joint_policy_value_v3.pt
+  checkpoint_dir: checkpoints/joint_policy_value_v3
+  metrics_path: data/metrics/joint_policy_value_v3.jsonl
+  batch_size: 64
+  epochs: 200
+  learning_rate: 0.000001
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: true
+  legal_policy_mask: true
+
+  # Keep policy as the main objective while teaching the value head enough to
+  # guide PUCT. Both update together, avoiding the earlier head-by-head drift.
+  policy_loss_weight: 1.0
+  value_loss_weight: 0.25
+  selection_metric: validation_loss
+  early_stopping_patience: 30
+  early_stopping_min_delta: 0.0001
+  checkpoint_every: 10
+  baseline_eligible: true
+
+  # Keep all examples from one source/opening group on one side of the split.
+  validation_group_key: composition_group_id
+  sample_weight_key: joint_training_weight
+  log_every: 50

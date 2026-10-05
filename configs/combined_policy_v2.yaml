@@ -1,0 +1,13 @@
+composition:
+  output_path: data/datasets/combined_policy_v2.pt
+  output_weight_key: combined_training_weight
+  sources:
+    - name: filtered_human_games
+      path: data/datasets/kaggle_games_15000.pt
+      constant_weight: 0.5
+    - name: stockfish_tactics
+      path: data/datasets/kaggle_tactics_15000.pt
+      constant_weight: 1.5
+    - name: minimax_d3_teacher
+      path: data/datasets/minimax_d1_d2_d3_3000.pt
+      metadata_weight_key: actor_outcome_weight

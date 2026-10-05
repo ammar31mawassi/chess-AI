@@ -1,0 +1,38 @@
+# Generation only. Fifty reproducible 2-3-full-move openings are reused by
+# four matchups and both Agent-A colors: 50 * 4 * 2 = exactly 400 games.
+seed: 2026
+device: cuda
+
+mixed_batch:
+  neural_checkpoint: checkpoints/gen1_vs_d1_d2_teacher_500_candidate_v1/epoch_0002.pt
+
+  state_path: data/curricula/gen2_mixed_d1_d2_400/state.json
+  manifest_path: data/curricula/gen2_mixed_d1_d2_400/manifest.json
+  dataset_path: data/datasets/gen2_mixed_d1_d2_400.pt
+  opening_dataset_dir: data/curricula/gen2_mixed_d1_d2_400/openings
+  pgn_dir: data/games/gen2_mixed_d1_d2_400
+
+  opening_positions: 50
+  minimax_d1_depth: 1
+  minimax_d2_depth: 2
+  teacher_depth: 2
+  max_plies: 200
+
+  # Full moves, not plies. Every cohort starts from the identical 50 positions.
+  opening_min_full_moves: 2
+  opening_max_full_moves: 3
+
+  # D2 scores every legal root move. The strongest five become a soft target.
+  teacher_policy_temperature: 100.0
+  teacher_policy_top_k: 5
+
+  # Applied to the actor at each stored position, not indiscriminately to the
+  # whole game. Winning moves receive 2x, draw moves 1.5x, losing moves 1x.
+  win_weight: 2.0
+  draw_weight: 1.5
+  loss_weight: 1.0
+
+  # Seeded variation is allowed only when minimax has multiple equally scored
+  # best moves. This prevents the two D2-vs-D2 games from being exact clones.
+  minimax_random_tie_breaks: true
+  resume: true

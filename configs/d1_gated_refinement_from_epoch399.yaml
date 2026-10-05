@@ -1,0 +1,57 @@
+# Gameplay-gated continuation from the strongest observed D1 checkpoint.
+# Twenty total rounds collect 200 training pairs (400 games). Rounds 1-10 are
+# complete; resuming this config adds rounds 11-20. Each candidate and its
+# champion play the same eight openings in both colors against D1.
+seed: 2026
+device: cuda
+
+gated_refinement:
+  # This numbered file is immutable. The first command copies it byte-for-byte
+  # to champions/generation_0000.pt and records a gameplay champion manifest.
+  initial_champion_checkpoint: checkpoints/d1_opponent_d2_teacher_100/epoch_0399.pt
+  replay_dataset_path: data/datasets/minimax_d2_diverse_500.pt
+
+  state_path: data/curricula/d1_gated_from_epoch399/state.json
+  champion_dir: checkpoints/d1_gated_from_epoch399/champions
+  candidate_dir: checkpoints/d1_gated_from_epoch399/candidates
+  corrections_dir: data/curricula/d1_gated_from_epoch399/corrections
+  metrics_dir: data/metrics/d1_gated_from_epoch399
+  training_pgn_dir: data/games/d1_gated_from_epoch399/training
+  gate_pgn_dir: data/games/d1_gated_from_epoch399/gate
+
+  rounds: 20 # total target; rounds 1-10 are already complete
+  cycles_per_round: 10
+  opponent_depth: 1
+  teacher_depth: 2
+  max_plies: 200
+
+  # Fresh training positions are different from the old 600-cycle run. Every
+  # fifth pair remains a direct standard-start correction in both colors.
+  opening_min_plies: 4
+  opening_max_plies: 8
+  normal_start_every_cycles: 5
+
+  # Gate opening 0 is always standard. The other seven are fixed, seeded 4-8
+  # ply starts. Candidate and champion independently face D1 from every start
+  # as White and Black, so each round has 32 evaluation-only games.
+  gate_openings: 8
+  gate_opening_min_plies: 4
+  gate_opening_max_plies: 8
+  minimum_improvement_points: 0.5
+  require_standard_non_regression: true
+
+  # Conservative one-epoch candidates start fresh from the current champion.
+  # The value target is disabled here: the raw NeuralAgent chooses from policy
+  # only, while correction-game values mostly describe later student mistakes.
+  training_examples_per_round: 4096
+  correction_fraction: 0.20
+  anchor_correction_share: 0.25
+  batch_size: 64
+  learning_rate: 0.000002
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  policy_loss_weight: 1.0
+  value_loss_weight: 0.0
+  legal_policy_mask: true
+
+  resume: true
