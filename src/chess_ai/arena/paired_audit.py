@@ -20,6 +20,8 @@ import torch
 from chess_ai.agents.minimax_agent import MinimaxAgent
 from chess_ai.agents.neural_agent import NeuralAgent
 from chess_ai.agents.neural_mcts_agent import NeuralMCTSAgent
+from chess_ai.agents.opening_book_agent import OpeningBookAgent
+from chess_ai.arena.audit_statistics import paired_uncertainty, result_slices
 from chess_ai.arena.match import run_match
 from chess_ai.model.checkpoint import load_checkpoint
 
@@ -139,7 +141,11 @@ def _opening_suite(
     excluded_fens: set[str],
 ) -> list[tuple[chess.Board, list[str], int]]:
     suite: list[tuple[chess.Board, list[str], int]] = [(chess.Board(), [], seed)]
-    seen = {chess.Board().fen(), *excluded_fens}
+    seen = {
+        chess.Board().fen(),
+        *excluded_fens,
+        *(" ".join(chess.Board(fen).fen().split()[:4]) for fen in excluded_fens),
+    }
     lengths = list(range(minimum_full_moves, maximum_full_moves + 1))
     for opening_index in range(1, openings):
         base_seed = seed + opening_index * 1_000_003
@@ -160,6 +166,7 @@ def _opening_suite(
                 len(moves) == requested_plies
                 and not board.is_game_over(claim_draw=True)
                 and board.fen() not in seen
+                and " ".join(board.fen().split()[:4]) not in seen
             ):
                 seen.add(board.fen())
                 suite.append((board, moves, opening_seed))
@@ -181,7 +188,8 @@ def _checkpoint_results(
     pgn_dir: Path,
     search_simulations: int = 0,
     c_puct: float = 1.5,
-) -> tuple[dict[str, float | int], list[dict[str, Any]]]:
+    opening_book: Path | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     neural = (
         NeuralMCTSAgent(
             checkpoint,
@@ -212,8 +220,15 @@ def _checkpoint_results(
                     seed=seed + opening_index * 2 + int(neural_color),
                     name=f"Minimax D{opponent_depth} opponent",
                 )
-                white = neural if neural_color == chess.WHITE else opponent
-                black = opponent if neural_color == chess.WHITE else neural
+                guided = (
+                    OpeningBookAgent(
+                        neural, opening_book, seed=seed + opening_index * 2 + int(neural_color)
+                    )
+                    if opening_book is not None
+                    else neural
+                )
+                white = guided if neural_color == chess.WHITE else opponent
+                black = opponent if neural_color == chess.WHITE else guided
                 pgn_path = pgn_dir / role / (f"opening_{opening_index:03d}_neural_{color_name}.pgn")
                 result = run_match(
                     white,
@@ -232,6 +247,7 @@ def _checkpoint_results(
                         "Checkpoint": str(checkpoint),
                         "OpponentDepth": str(opponent_depth),
                         "TrainingData": "false",
+                        "OpeningBook": str(opening_book or ""),
                     },
                 )
                 if result.result == "1/2-1/2":
@@ -266,12 +282,106 @@ def _checkpoint_results(
         for game in standard_games
     )
     return {
+        **result_slices(games),
         "wins": wins,
         "draws": draws,
         "losses": losses,
         "points": wins + 0.5 * draws,
         "standard_points": standard_points,
     }, games
+
+
+def _direct_baseline_results(
+    candidate: Path,
+    champion: Path,
+    *,
+    opening_suite: Sequence[tuple[chess.Board, list[str], int]],
+    max_plies: int,
+    seed: int,
+    device: str,
+    pgn_dir: Path,
+    search_simulations: int,
+    c_puct: float,
+) -> dict[str, Any]:
+    """Candidate directly faces the baseline on the same two-color holdout suite."""
+
+    def agent(path: Path) -> NeuralAgent:
+        return (
+            NeuralMCTSAgent(
+                path, device=device, simulations=search_simulations, c_puct=c_puct, seed=seed
+            )
+            if search_simulations
+            else NeuralAgent(path, device=device, seed=seed)
+        )
+
+    candidate_agent, baseline_agent = agent(candidate), agent(champion)
+    games: list[dict[str, Any]] = []
+    try:
+        for index, (board, moves, opening_seed) in enumerate(opening_suite):
+            for color in ("white", "black"):
+                white, black = (
+                    (candidate_agent, baseline_agent)
+                    if color == "white"
+                    else (baseline_agent, candidate_agent)
+                )
+                result = run_match(
+                    white,
+                    black,
+                    max_plies=max_plies - len(moves),
+                    starting_fen=board.fen(),
+                    pgn_path=pgn_dir
+                    / "direct_baseline"
+                    / f"opening_{index:03d}_candidate_{color}.pgn",
+                    extra_headers={
+                        "TrainingData": "false",
+                        "EvaluationKind": "direct-candidate-baseline",
+                        "OpeningSeed": str(opening_seed),
+                        "Candidate": str(candidate),
+                        "Baseline": str(champion),
+                    },
+                )
+                if result.illegal_agent:
+                    raise PairedAuditError(
+                        f"Illegal output during direct audit: {result.illegal_agent}"
+                    )
+                outcome = (
+                    "draw"
+                    if result.is_draw
+                    else "win"
+                    if (result.result == "1-0") == (color == "white")
+                    else "loss"
+                )
+                games.append(
+                    {
+                        "opening_index": index,
+                        "neural_color": color,
+                        "neural_outcome": outcome,
+                        "result": result.result,
+                        "termination": result.termination,
+                        "pgn_path": str(result.pgn_path),
+                    }
+                )
+    finally:
+        del candidate_agent, baseline_agent
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    inverse = [
+        {
+            **game,
+            "neural_color": "black" if game["neural_color"] == "white" else "white",
+            "neural_outcome": {"win": "loss", "loss": "win", "draw": "draw"}[
+                game["neural_outcome"]
+            ],
+        }
+        for game in games
+    ]
+    return {
+        "candidate_stats": result_slices(games),
+        "baseline_stats": result_slices(inverse),
+        "games": games,
+        "uncertainty": paired_uncertainty(games, inverse, seed=seed),
+    }
 
 
 def run_paired_audit(
@@ -290,6 +400,9 @@ def run_paired_audit(
     exclude_manifest: str | Path | None = None,
     search_simulations: int = 0,
     c_puct: float = 1.5,
+    direct_baseline: bool = False,
+    additional_exclude_manifests: Sequence[str | Path] = (),
+    opening_book: str | Path | None = None,
 ) -> PairedAuditSummary:
     """Compare two checkpoints on identical unseen starts without promotion."""
 
@@ -297,6 +410,13 @@ def run_paired_audit(
     champion = Path(champion_checkpoint)
     destination = Path(pgn_dir)
     manifest = Path(exclude_manifest) if exclude_manifest is not None else None
+    book = Path(opening_book) if opening_book is not None else None
+    if book is not None:
+        from chess_ai.data.opening_book import load_opening_book
+
+        load_opening_book(book)
+        if direct_baseline:
+            raise ValueError("Book-assisted audit currently supports opponent comparisons only")
     for path, label in ((candidate, "Candidate"), (champion, "Champion")):
         if not path.is_file():
             raise PairedAuditError(f"{label} checkpoint does not exist: {path}")
@@ -328,6 +448,8 @@ def run_paired_audit(
         )
 
     excluded_fens = _excluded_opening_fens(manifest)
+    for additional in additional_exclude_manifests:
+        excluded_fens.update(_excluded_opening_fens(Path(additional)))
     suite = _opening_suite(
         openings=openings,
         seed=audit_seed,
@@ -346,6 +468,7 @@ def run_paired_audit(
         pgn_dir=destination,
         search_simulations=search_simulations,
         c_puct=c_puct,
+        **({"opening_book": book} if book is not None else {}),
     )
     champion_stats, champion_games = _checkpoint_results(
         champion,
@@ -358,12 +481,50 @@ def run_paired_audit(
         pgn_dir=destination,
         search_simulations=search_simulations,
         c_puct=c_puct,
+        **({"opening_book": book} if book is not None else {}),
     )
     point_delta = float(candidate_stats["points"]) - float(champion_stats["points"])
     standard_non_regression = float(candidate_stats["standard_points"]) >= float(
         champion_stats["standard_points"]
     )
     supports_promotion = point_delta >= minimum_improvement_points and standard_non_regression
+    direct_result = (
+        _direct_baseline_results(
+            candidate,
+            champion,
+            opening_suite=suite,
+            max_plies=max_plies,
+            seed=audit_seed,
+            device=device,
+            pgn_dir=destination,
+            search_simulations=search_simulations,
+            c_puct=c_puct,
+        )
+        if direct_baseline
+        else None
+    )
+    regressions = [
+        scope
+        for scope in ("standard", "varied")
+        if candidate_stats[scope]["points"] < champion_stats[scope]["points"]
+    ]
+    regressions.extend(
+        f"color_{color}"
+        for color in ("white", "black")
+        if candidate_stats["by_color"][color]["points"]
+        < champion_stats["by_color"][color]["points"]
+    )
+    if direct_result is not None:
+        direct_candidate, direct_champion = (
+            direct_result["candidate_stats"],
+            direct_result["baseline_stats"],
+        )
+        if (
+            direct_candidate["points"] < direct_champion["points"]
+            or direct_candidate["standard_points"] < direct_champion["standard_points"]
+        ):
+            regressions.append("direct_baseline")
+            supports_promotion = False
     verdict = "improved" if point_delta > 0.0 else "tied" if point_delta == 0.0 else "regressed"
     report_path = destination / "report.json"
     report = {
@@ -372,6 +533,8 @@ def run_paired_audit(
         "opponent_depth": opponent_depth,
         "search_simulations": search_simulations,
         "c_puct": c_puct,
+        "opening_book": str(book) if book is not None else None,
+        "opening_book_sha256": _sha256_file(book) if book is not None else None,
         "openings": [
             {
                 "index": index,
@@ -382,6 +545,9 @@ def run_paired_audit(
             for index, (board, moves, opening_seed) in enumerate(suite)
         ],
         "excluded_training_manifest": str(manifest) if manifest is not None else None,
+        "additional_excluded_manifests": [str(path) for path in additional_exclude_manifests],
+        "direct_baseline": direct_result,
+        "regressions": regressions,
         "candidate_checkpoint": str(candidate),
         "candidate_sha256": _sha256_file(candidate),
         "candidate_stats": candidate_stats,
@@ -394,6 +560,9 @@ def run_paired_audit(
         "minimum_improvement_points": minimum_improvement_points,
         "standard_non_regression": standard_non_regression,
         "supports_promotion": supports_promotion,
+        "promotion_performed": False,
+        "uncertainty": paired_uncertainty(candidate_games, champion_games, seed=audit_seed),
+        "promotion_note": "supports_promotion is a provisional point/non-regression gate, not statistical proof; require multiple fresh seeds and direct baseline matches.",
         "verdict": verdict,
         "training_updates": 0,
     }

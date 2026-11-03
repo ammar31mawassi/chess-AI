@@ -1,0 +1,23 @@
+stockfish_batch:
+  run_dir: data/curricula/stockfish_teacher_v1_smoke/collection
+  neural_checkpoint: checkpoints/joint_policy_value_v3/epoch_0120.pt
+  seed: 2036
+  device: cpu
+  opening_positions: 1
+  opening_min_full_moves: 0
+  opening_max_full_moves: 0
+  normal_start_every_positions: 1
+  max_plies: 8
+  positions_per_game: 2
+  d1_depth: 1
+  d2_depth: 2
+  tactical_share: 0.25
+  stockfish:
+    executable: references/github/stockfish-build/49ea5ded38315cff8e67f4a677a9e7811612fbf6/stockfish.exe
+    source_commit: 49ea5ded38315cff8e67f4a677a9e7811612fbf6
+    nodes: 1000
+    multipv: 3
+    threads: 1
+    hash_mb: 16
+    timeout_seconds: 30.0
+    cache_dir: data/curricula/stockfish_teacher_v1_smoke/cache

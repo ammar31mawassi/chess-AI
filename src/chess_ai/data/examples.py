@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import pickle
 import random
 from collections.abc import Iterator, Mapping, Sequence
@@ -18,6 +17,9 @@ import torch
 from numpy.typing import NDArray
 from torch import Tensor
 from torch.utils.data import Dataset
+
+from chess_ai.data.value_targets import SHARDED_DATASET_FORMAT, validate_value_spec
+from chess_ai.storage.artifacts import replace_with_retry, sha256_file
 
 DATASET_FORMAT = "self-improving-chess-ai.supervised-examples"
 DATASET_VERSION = 1
@@ -158,7 +160,7 @@ def _atomic_save(payload: object, destination: Path) -> None:
     temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
     try:
         torch.save(payload, temporary)
-        os.replace(temporary, destination)
+        replace_with_retry(temporary, destination)
     except (OSError, RuntimeError, TypeError, pickle.PickleError) as exc:
         raise DatasetFormatError(f"Could not save dataset to {destination}: {exc}") from exc
     finally:
@@ -170,10 +172,25 @@ def save_dataset(
     examples: Sequence[TrainingExample],
     *,
     metadata: Mapping[str, Any] | None = None,
+    format_version: int = DATASET_VERSION,
 ) -> Path:
-    """Atomically save examples in dataset format version 1."""
+    """Atomically save legacy version 1 or explicitly typed evaluation version 2."""
 
     normalized = list(examples)
+    if format_version not in (1, 2):
+        raise IncompatibleDatasetError("Supported dataset versions are 1 and 2")
+    if format_version == 1 and any(
+        item.metadata.get("value_target_kind") == "stockfish_cp_tanh_v1" for item in normalized
+    ):
+        raise IncompatibleDatasetError("Stockfish evaluation targets require dataset version 2")
+    if format_version == 2:
+        validate_value_spec((metadata or {}).get("value_target_spec"))
+        if any(
+            item.metadata.get("value_target_kind") != "stockfish_cp_tanh_v1" for item in normalized
+        ):
+            raise IncompatibleDatasetError(
+                "Every version-2 row requires the Stockfish evaluation target kind"
+            )
     if normalized:
         boards = torch.from_numpy(np.stack([item.board_tensor for item in normalized]))
         policies = torch.from_numpy(np.stack([item.target_policy for item in normalized]))
@@ -190,7 +207,7 @@ def save_dataset(
     file_metadata = _json_mapping(metadata or {})
     payload = {
         "format": DATASET_FORMAT,
-        "format_version": DATASET_VERSION,
+        "format_version": format_version,
         "created_utc": datetime.now(UTC).isoformat(),
         "board_shape": BOARD_SHAPE,
         "action_size": ACTION_SIZE,
@@ -206,23 +223,25 @@ def save_dataset(
     return destination
 
 
-def _torch_load(path: Path) -> Any:
+def _torch_load(path: Path, *, mmap: bool = False) -> Any:
     try:
         try:
-            return torch.load(path, map_location="cpu", weights_only=True)
+            return torch.load(path, map_location="cpu", weights_only=True, mmap=mmap)
         except TypeError:  # pragma: no cover - compatibility with older PyTorch
             return torch.load(path, map_location="cpu")
     except (EOFError, OSError, RuntimeError, ValueError, pickle.PickleError) as exc:
         raise DatasetFormatError(f"Could not read dataset {path}: {exc}") from exc
 
 
-def load_dataset(path: str | Path) -> LoadedDataset:
+def load_dataset(path: str | Path, *, mmap: bool = False) -> LoadedDataset:
     """Load a dataset after checking its schema and tensor dimensions."""
 
     source = Path(path)
     if not source.is_file():
         raise DatasetFormatError(f"Dataset does not exist: {source}")
-    raw = _torch_load(source)
+    if source.suffix == ".json":
+        return _load_sharded_dataset(source)
+    raw = _torch_load(source, mmap=mmap)
     if not isinstance(raw, dict):
         raise IncompatibleDatasetError("Dataset root must be a mapping")
     if raw.get("format") != DATASET_FORMAT:
@@ -230,7 +249,7 @@ def load_dataset(path: str | Path) -> LoadedDataset:
             f"Unsupported dataset format {raw.get('format')!r}; expected {DATASET_FORMAT!r}"
         )
     version = raw.get("format_version")
-    if version != DATASET_VERSION:
+    if version not in (1, 2):
         raise IncompatibleDatasetError(
             f"Unsupported dataset version {version!r}; this code supports {DATASET_VERSION}"
         )
@@ -238,6 +257,11 @@ def load_dataset(path: str | Path) -> LoadedDataset:
         raise IncompatibleDatasetError(
             f"Dataset board shape {raw.get('board_shape')!r} is incompatible with {BOARD_SHAPE}"
         )
+    if version == 2:
+        try:
+            validate_value_spec(raw.get("metadata", {}).get("value_target_spec"))
+        except ValueError as exc:
+            raise IncompatibleDatasetError(f"Invalid dataset version 2: {exc}") from exc
     if raw.get("action_size") != ACTION_SIZE:
         raise IncompatibleDatasetError(
             f"Dataset action size {raw.get('action_size')!r} is incompatible with {ACTION_SIZE}"
@@ -274,6 +298,12 @@ def load_dataset(path: str | Path) -> LoadedDataset:
             raise IncompatibleDatasetError(f"Example {index} metadata is invalid JSON") from exc
         if not isinstance(item_metadata, dict):
             raise IncompatibleDatasetError(f"Example {index} metadata must be a mapping")
+        if version == 2 and item_metadata.get("value_target_kind") != "stockfish_cp_tanh_v1":
+            raise IncompatibleDatasetError("Version-2 row has an incompatible value target")
+        if version == 1 and item_metadata.get("value_target_kind") == "stockfish_cp_tanh_v1":
+            raise IncompatibleDatasetError(
+                "Stockfish evaluation rows cannot load as legacy version 1"
+            )
         try:
             examples.append(
                 TrainingExample(
@@ -293,8 +323,58 @@ def load_dataset(path: str | Path) -> LoadedDataset:
     return LoadedDataset(
         examples=examples,
         metadata=_json_mapping(raw_metadata),
-        format_version=DATASET_VERSION,
+        format_version=int(version),
         created_utc=str(created),
+    )
+
+
+def _load_sharded_dataset(source: Path) -> LoadedDataset:
+    raw = json.loads(source.read_text(encoding="utf-8"))
+    if raw.get("format") != SHARDED_DATASET_FORMAT or raw.get("version") != 1:
+        raise IncompatibleDatasetError("Unsupported sharded evaluation dataset")
+    spec = validate_value_spec(raw.get("value_target_spec"))
+    examples: list[TrainingExample] = []
+    seen: set[str] = set()
+    groups_by_split: dict[str, set[str]] = {"train": set(), "validation": set()}
+    for entry in raw["shards"]:
+        path = (source.parent / entry["path"]).resolve()
+        if not path.is_relative_to(source.parent.resolve()):
+            raise IncompatibleDatasetError("Dataset shard escapes its manifest directory")
+        if sha256_file(path) != entry["sha256"]:
+            raise IncompatibleDatasetError(f"Dataset shard hash mismatch: {path}")
+        shard = load_dataset(path, mmap=True)
+        if (
+            shard.format_version != 2
+            or shard.metadata.get("value_target_spec") != spec
+            or len(shard) != entry["examples"]
+        ):
+            raise IncompatibleDatasetError("Dataset shard count or value semantics mismatch")
+        for example in shard:
+            key = str(example.metadata.get("position_key", ""))
+            if (
+                not key
+                or key in seen
+                or example.metadata.get("split") not in ("train", "validation")
+            ):
+                raise IncompatibleDatasetError(
+                    "Evaluation shard has duplicate positions or invalid splits"
+                )
+            seen.add(key)
+            groups_by_split[str(example.metadata["split"])].add(str(example.metadata["group_id"]))
+        examples.extend(shard)
+    if len(examples) != raw["examples"]:
+        raise IncompatibleDatasetError("Evaluation manifest example count mismatch")
+    if groups_by_split["train"] & groups_by_split["validation"]:
+        raise IncompatibleDatasetError("Evaluation manifest leaks a game group between splits")
+    return LoadedDataset(
+        examples,
+        {
+            "value_target_spec": spec,
+            "explicit_split": True,
+            "dataset_signature": sha256_file(source),
+        },
+        2,
+        str(raw.get("created_utc", "")),
     )
 
 

@@ -1,0 +1,31 @@
+stockfish_batch:
+  run_dir: data/curricula/stockfish_teacher_v1/collection
+  neural_checkpoint: checkpoints/joint_policy_value_v3/epoch_0120.pt
+  seed: 2035
+  device: cuda
+  opening_positions: 100
+  opening_min_full_moves: 2
+  opening_max_full_moves: 5
+  normal_start_every_positions: 10
+  max_plies: 200
+  positions_per_game: 24
+  tactical_share: 0.25
+  d1_depth: 1
+  d2_depth: 2
+  win_weight: 2.0
+  draw_weight: 1.5
+  loss_weight: 1.0
+  stockfish:
+    executable: references/github/stockfish-build/49ea5ded38315cff8e67f4a677a9e7811612fbf6/stockfish.exe
+    source_commit: 49ea5ded38315cff8e67f4a677a9e7811612fbf6
+    nodes: 20000
+    depth: null
+    multipv: 5
+    threads: 1
+    hash_mb: 64
+    timeout_seconds: 30.0
+    temperature_cp: 100.0
+    mate_score_cp: 100000
+    evaluation_scale_cp: 600.0
+    store_evaluation: true
+    cache_dir: data/curricula/stockfish_teacher_v1/cache

@@ -19,11 +19,72 @@ def test_gui_parser_uses_safe_collection_defaults() -> None:
     assert args.human_color == "white"
     assert args.device == "auto"
     assert args.opening_book is None
-    assert args.search_simulations == 0
-    assert args.c_puct == 1.5
+    assert args.search_simulations is None
+    assert args.c_puct is None
     assert args.dataset_path == Path("data/datasets/human_gui.pt")
     assert args.pgn_dir == Path("data/games/human_gui")
     assert args.training_enabled is False
+
+
+def test_stockfish_commands_parse_staged_collection() -> None:
+    args = build_parser().parse_args(
+        [
+            "stockfish-batch",
+            "--config",
+            "configs/stockfish_teacher_v1.yaml",
+            "--stage",
+            "labels",
+            "--run-dir",
+            "data/new_run",
+        ]
+    )
+    assert args.stage == "labels" and args.run_dir == Path("data/new_run")
+    audit = build_parser().parse_args(
+        [
+            "paired-audit",
+            "--candidate",
+            "candidate.pt",
+            "--champion",
+            "baseline.pt",
+            "--direct-baseline",
+            "--exclude-additional-manifest",
+            "old.json",
+        ]
+    )
+    assert audit.direct_baseline and audit.exclude_additional_manifest == [Path("old.json")]
+
+
+def test_diagnostic_commands_require_explicit_inputs_and_output() -> None:
+    args = build_parser().parse_args(
+        [
+            "diagnose-training",
+            "--config",
+            "train.yaml",
+            "--checkpoint",
+            "base.pt",
+            "--checkpoint",
+            "candidate.pt",
+            "--output",
+            "sources.json",
+        ]
+    )
+    assert args.checkpoint == [Path("base.pt"), Path("candidate.pt")]
+    assert args.source_key == "composition_source"
+    games = build_parser().parse_args(
+        [
+            "diagnose-games",
+            "--config",
+            "collect.yaml",
+            "--selection-report",
+            "report.json",
+            "--candidate",
+            "candidate.pt",
+            "--output",
+            "games.json",
+        ]
+    )
+    assert games.nodes == 5000 and games.seed == 2040
+    assert games.positions_per_game == 16
 
 
 def test_gui_parser_accepts_neural_play_options() -> None:
@@ -89,8 +150,8 @@ def test_gui_command_lazily_forwards_options(monkeypatch: pytest.MonkeyPatch) ->
         "human_color": "black",
         "device": "cpu",
         "opening_book": None,
-        "search_simulations": 0,
-        "c_puct": 1.5,
+        "search_simulations": None,
+        "c_puct": None,
         "dataset_path": Path("data/datasets/human_gui.pt"),
         "pgn_dir": Path("data/games/human_gui"),
         "training_enabled": True,

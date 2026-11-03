@@ -34,12 +34,20 @@ python -m chess_ai gui `
   --training-enabled
 ```
 
-Use `--human-color black` to play the other side. If `--checkpoint` is omitted, discovery prefers the
-newest successful `checkpoints/human_sessions/**/best.pt`, then checks
+Use `--human-color black` to play the other side. If `--checkpoint` is omitted, discovery first uses
+the explicit `checkpoints/champion.json` record, verifies the checkpoint checksum, and applies its
+PUCT settings. An invalid record or missing/modified champion fails clearly. Without a champion
+record, discovery prefers the newest successful `checkpoints/human_sessions/**/best.pt`, then checks
 `checkpoints/gpu_first/best.pt`, `checkpoints/dev/best.pt`, the newest other
 `checkpoints/**/best.pt`, and finally the newest `checkpoints/**/last.pt`. If none exists, the field
 stays blank for you to browse. `--device auto` uses CUDA when the installed PyTorch build can access
 it and otherwise uses CPU.
+
+The promoted Stockfish rebuild champion is a frozen copy of epoch 60, with 32 PUCT simulations,
+`c_puct=1.5`, and no opening book. Launch it with `python -m chess_ai gui --device cuda`.
+An explicit `--search-simulations 0` overrides search with greedy play. An explicit `--checkpoint`
+bypasses champion discovery and defaults to greedy play unless a simulation count is supplied.
+New training outputs do not replace the registered champion on the next launch.
 
 Every launch reserves a unique GUI session ID before training can begin. The ID names a generated
 configuration, a new checkpoint directory, and a new metrics file, so clicking the training button
@@ -61,6 +69,9 @@ The command options are:
 | `--checkpoint PATH` | local discovery | Neural model used for the opponent |
 | `--human-color white\|black` | `white` | Human's color for the first game |
 | `--device auto\|cpu\|cuda` | `auto` | PyTorch inference device |
+| `--search-simulations N` | champion setting, otherwise `0` | PUCT budget; `0` selects greedy play |
+| `--c-puct NUMBER` | champion setting, otherwise `1.5` | PUCT exploration constant |
+| `--opening-book PATH` | off | Optional runtime book before neural play |
 | `--pgn-dir PATH` | `data/games/human_gui` | Independent game-record directory |
 | `--dataset-path PATH` | `data/datasets/human_gui.pt` | Dedicated confirmed-human dataset |
 | `--training-enabled` | off | Preselect the visible collection opt-in |

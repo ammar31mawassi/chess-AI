@@ -1,7 +1,56 @@
 # Training guide (Windows PowerShell)
 
+For separately testable search/tactics experiments and fresh failure-driven Stockfish training,
+see [the experiment README](search_experiments/README.md). Independent outputs preserve the
+champion, current full-corpus job, and holdouts. Search arms need no retraining; the failure-data
+workflow creates a separate replay candidate.
+
+For targeted endgame diagnosis, a bounded Stockfish curriculum, Syzygy/GM research,
+and exact expensive-job commands, use [the endgame pilot runbook](endgame_pilot.md).
+Its reserved candidate starts from the frozen epoch-60 champion and never promotes
+automatically. Preparation, CPU labeling, CUDA training and confirmation are separate.
+
+After that pilot retained its unchanged baseline, the [retention experiment and
+1,500-game GM collection](endgame_retention.md) compare ordinary/fixed BatchNorm
+statistics on identical replay. `training.freeze_batch_norm_statistics: true` keeps
+checkpoint running statistics while affine parameters continue to train; false is
+the default. Resume requires the same setting. Collected GM games remain outside training.
+
+For the next explicitly authorized import, use [GM endgame training](gm_endgame_training.md).
+It provides ordered PowerShell commands for historical exclusion, resumable CPU labeling,
+50/50 replay, CUDA training/resume and development evaluation, with 500 source games per GM.
+
+The next [full-corpus GM rebuild](full_gm_rebuild.md) preserves those 1,500 games and
+adds 500 per GM for 3,000 total. Its ordered PowerShell commands inventory all game
+phases plus compatible existing labels, time/resume CPU labeling, finalize sharded
+data, train from random weights, optionally compare champion initialization, and
+evaluate both candidates without changing the registered champion.
+
+To archive personal Chess.com games before a separate Stockfish/import step, see
+[the monthly PGN downloader](chesscom_download.md). Downloads stay outside training datasets.
+To explicitly turn those local positions into independent Stockfish move/evaluation targets, use
+[the personal-game training workflow](personal_stockfish_training.md).
+
+For a new model trained from scratch on Stockfish move and position-evaluation labels from existing
+training games, use [the Stockfish rebuild workflow](stockfish_rebuild.md). It includes resumable
+labeling, explicit target versions, both-color coverage, and separate greedy/PUCT/book comparisons.
+
+After promotion, use [the all-move champion refinement workflow](stockfish_refinement.md) for
+200 varied D1/D2 games plus four standard-start book games, Stockfish position/move analysis,
+bounded 50/50 replay, and conservative fine-tuning from the frozen champion.
+
 These commands assume PowerShell is open in the repository root. Phase 1 is a supervised bootstrap;
 the tiny run proves the software path, not playing strength.
+
+For the new epoch-120/Stockfish stage, use the complete ordered
+[Stockfish v1 PowerShell runbook](stockfish_teacher.md). It creates unique versioned collection,
+composition, checkpoint, metric, selection, and audit paths and keeps game generation separate from
+teacher labeling and CUDA optimization. It also covers Ctrl+C, finalization, training resume, engine
+provenance, hardware costs, and the existing local opening-refinement artifacts.
+
+For the completed 2026-10-07 run, see the [source diagnostics and matched sampling
+experiment](stockfish_sampling_ablation.md). It reuses the existing frozen replay and compares
+10-epoch control/teacher-focus runs; there is no need to rerun collection or composition.
 
 ## 1. Create and activate an environment
 
@@ -835,6 +884,12 @@ Long-run controls are optional and backward-compatible:
 - `checkpoint_every`: retain an `epoch_*.pt` every N epochs; `best.pt` and `last.pt` remain current.
 - `baseline_eligible: true` writes `baseline.pt` for a run started with `--init-checkpoint` and
   keeps epoch zero eligible as `best.pt` until a new epoch improves the configured metric.
+- `validation_source_key`: optional explicit metadata label (for example `composition_source`)
+  adds weighted/unweighted per-source holdout metrics under `validation_by_source` each epoch.
+- `source_sampling_multipliers`: optional positive finite multipliers over the existing
+  game-balanced sampling weights; `sampling_source_key` defaults to `composition_source`.
+  Unspecified sources use 1. Missing labels or configured sources absent from training fail.
+  These change training draws only; validation and saved loss weights are unchanged.
 
 The checkpoint must match the model configuration. Optimizer state is restored when present. If the
 checkpoint already reached `training.epochs`, the command performs no new optimizer steps; increase
@@ -904,6 +959,9 @@ python -m chess_ai gui `
 ```
 
 Use `--human-color black` for the next set of games so the dataset does not contain only one color.
+With no explicit checkpoint, the GUI prefers the checksum-bound champion in
+`checkpoints/champion.json` and uses its promoted search settings (currently PUCT 32). New training
+outputs do not automatically replace that champion. See [the GUI guide](gui_guide.md) for overrides.
 The GUI saves game PGNs independently. Collection is opt-in and receives a second confirmation only
 after a completed result: only human-chosen moves become policy labels, the confirmed result becomes
 their value label, and unfinished games are excluded. The default paths are

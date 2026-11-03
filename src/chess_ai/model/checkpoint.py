@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import pickle
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -16,7 +15,9 @@ from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 
+from chess_ai.data.value_targets import validate_value_spec
 from chess_ai.model.policy_value_net import ModelConfig, PolicyValueNet
+from chess_ai.storage.artifacts import replace_with_retry
 
 CHECKPOINT_FORMAT = "self-improving-chess-ai.policy-value-checkpoint"
 CHECKPOINT_VERSION = 1
@@ -52,7 +53,7 @@ def _atomic_torch_save(payload: object, destination: Path) -> None:
     try:
         torch.save(payload, temporary)
         # os.replace is atomic when source and destination share a filesystem.
-        os.replace(temporary, destination)
+        replace_with_retry(temporary, destination)
     except (OSError, RuntimeError, TypeError, pickle.PickleError) as exc:
         raise CheckpointError(f"Could not save checkpoint to {destination}: {exc}") from exc
     finally:
@@ -90,9 +91,13 @@ def save_checkpoint(
     if epoch < 0:
         raise ValueError("epoch cannot be negative")
     destination = Path(path)
+    spec = (training_config or {}).get("value_target_spec")
+    if spec is not None:
+        validate_value_spec(spec)
     payload: dict[str, Any] = {
         "format": CHECKPOINT_FORMAT,
-        "format_version": CHECKPOINT_VERSION,
+        "format_version": 2 if spec is not None else CHECKPOINT_VERSION,
+        "value_target_spec": spec,
         "created_utc": datetime.now(UTC).isoformat(),
         "torch_version": torch.__version__,
         "model_config": _model_config(model).to_dict(),
@@ -126,11 +131,20 @@ def _read_payload(path: Path, map_location: str | torch.device) -> dict[str, Any
             f"Unsupported checkpoint format {raw.get('format')!r}; expected {CHECKPOINT_FORMAT!r}"
         )
     version = raw.get("format_version")
-    if version != CHECKPOINT_VERSION:
+    if version not in (1, 2):
         raise IncompatibleCheckpointError(
             f"Unsupported checkpoint version {version!r}; this code supports "
             f"version {CHECKPOINT_VERSION}"
         )
+    if version == 2:
+        try:
+            validate_value_spec(raw.get("value_target_spec"))
+        except ValueError as exc:
+            raise IncompatibleCheckpointError(str(exc)) from exc
+        if raw.get("training_config", {}).get("value_target_spec") != raw["value_target_spec"]:
+            raise IncompatibleCheckpointError(
+                "Checkpoint value semantics disagree with training config"
+            )
     for key in ("model_config", "model_state_dict", "epoch"):
         if key not in raw:
             raise IncompatibleCheckpointError(f"Checkpoint is missing required field {key!r}")
@@ -203,6 +217,7 @@ def load_checkpoint(
             "model_config",
             "training_config",
             "dataset_version",
+            "value_target_spec",
         )
     }
     return LoadedCheckpoint(

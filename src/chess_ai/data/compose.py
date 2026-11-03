@@ -147,6 +147,10 @@ def compose_datasets(config: CompositionConfig) -> CompositionSummary:
         if not source.path.is_file():
             raise DatasetCompositionError(f"Composition source does not exist: {source.path}")
         loaded = load_dataset(source.path)
+        if loaded.format_version != 1:
+            raise DatasetCompositionError(
+                "Evaluation datasets must use their versioned rebuild manifest; legacy composition cannot mix or downgrade them"
+            )
         counts[source.name] = len(loaded)
         source_metadata.append(
             {

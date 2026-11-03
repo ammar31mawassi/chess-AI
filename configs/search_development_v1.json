@@ -1,0 +1,21 @@
+{
+  "format": "self-improving-chess-ai.search-experiments.suite",
+  "version": 1,
+  "purpose": "Public synthetic development cases; never confirmation or training inputs",
+  "cases": [
+    {"id": "start", "category": "opening", "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"},
+    {"id": "open_game", "category": "middlegame", "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2", "setup_moves": ["g1f3", "b8c6", "f1c4", "g8f6"]},
+    {"id": "queen_mate", "category": "mate", "fen": "7k/8/5KQ1/8/8/8/8/8 w - - 0 1", "criterion": "mate_in_one"},
+    {"id": "rook_mate", "category": "mate", "fen": "7k/5K2/8/8/8/8/8/R7 w - - 0 1", "criterion": "mate_in_one"},
+    {"id": "black_mate", "category": "mate", "fen": "8/8/8/8/8/5kq1/8/7K b - - 0 1", "criterion": "mate_in_one"},
+    {"id": "queen_conversion", "category": "conversion", "fen": "7k/8/8/8/8/2K5/8/Q7 w - - 0 1"},
+    {"id": "rook_conversion", "category": "conversion", "fen": "7k/8/8/8/8/2K5/8/R7 w - - 0 1"},
+    {"id": "pawn_race", "category": "promotion", "fen": "8/1P5k/8/8/8/8/6p1/K7 w - - 0 1"},
+    {"id": "take_queen", "category": "tactic", "fen": "7k/8/8/8/3q4/2P5/8/K7 w - - 0 1", "expected_moves": ["c3d4"]},
+    {"id": "check_evasion", "category": "check", "fen": "7k/8/8/8/8/8/7r/7K w - - 0 1", "expected_moves": ["h1h2"]},
+    {"id": "en_passant", "category": "rules", "fen": "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1"},
+    {"id": "castling", "category": "rules", "fen": "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"},
+    {"id": "near_fifty_move", "category": "draw_clock", "fen": "7k/8/8/8/8/2K5/P7/R7 w - - 98 1"},
+    {"id": "repetition_history", "category": "repetition", "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "setup_moves": ["g1f3", "g8f6", "f3g1", "f6g8"]}
+  ]
+}

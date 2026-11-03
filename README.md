@@ -10,6 +10,12 @@ not guaranteed.
 
 ## Current capabilities
 
+Independent opt-in search and failure-training experiments are documented in
+[the experiment README](docs/search_experiments/README.md): profiling, exact-input neural caching,
+batched PUCT leaves, bounded tactical verification, history-safe subtree reuse, and fresh
+Stockfish-labeled correction training. Each intervention is tested separately against the same
+checkpoint; the champion and production search defaults stay unchanged.
+
 - Uses `python-chess` as the authority for legal moves, special moves, outcomes, draws, FEN, and PGN.
 - Encodes positions as documented 18-plane tensors and moves in a deterministic 4,208-action space.
 - Provides seeded random, terminal human, alpha-beta minimax, and checkpoint-backed neural agents.
@@ -37,9 +43,10 @@ not guaranteed.
 
 ## Phase 1 non-goals
 
-This phase does not include Monte Carlo Tree Search, PUCT, Dirichlet noise, self-play reinforcement
-learning, parallel workers, automatic model promotion, Stockfish integration, online play, cloud
-services, or a database. The GUI is intentionally a local human-versus-neural workbench, not a
+The production agent includes deterministic PUCT, and offline teaching uses local Stockfish and
+resumable SQLite journals. Opt-in search experiments add batching and fresh correction collection.
+This phase does not include Dirichlet-noise self-play reinforcement learning, automatic model
+promotion, online play, or cloud services. The GUI is a local human-versus-neural workbench, not a
 general tournament frontend or a bridge to another chess application. The external application is
 **not automated**. The Chess Lv.100 is used only as a manually operated benchmark: a person copies
 the AI move into it and types its reply.
@@ -192,6 +199,13 @@ data can make the model worse.
 
 ## Training workflow
 
+The separately executed local Stockfish teacher is now available through `stockfish-check` and
+`stockfish-batch`. It never participates in gameplay or starts training. Follow the ordered
+[Stockfish v1 PowerShell runbook](docs/stockfish_teacher.md) for unique artifacts, staged collection,
+resume, replay composition, CUDA training, gameplay selection, and fresh multi-seed audits.
+The [prioritized improvement roadmap](docs/model_improvement_comparison.md#stockfish-stage-roadmap)
+distinguishes the improvements implemented here from later self-play work.
+
 1. Generate labels from reproducibly seeded minimax/random games.
 2. Inspect the versioned dataset metadata and game mix.
 3. Train with a fixed whole-game or whole-opening-pair validation split.
@@ -287,7 +301,7 @@ cannot remove all hardware-dependent floating-point variation.
 - Dirichlet exploration noise
 - Self-play replay buffer and full reinforcement-learning loop
 - Candidate-versus-champion promotion criteria and parallel self-play workers
-- Stockfish/UCI and tactical-puzzle benchmarks
+- Limited-budget Stockfish gameplay and tactical-puzzle benchmarks (UCI teacher analysis is implemented)
 - Optional approved online-bot integration, kept separate from manual external mode
 
 These are documented future layers, not hidden or partial Phase 1 features.

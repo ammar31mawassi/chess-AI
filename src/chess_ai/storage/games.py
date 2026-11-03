@@ -15,6 +15,8 @@ from uuid import uuid4
 import chess
 import chess.pgn
 
+from chess_ai.storage.artifacts import replace_with_retry
+
 
 class PgnValidationError(ValueError):
     """Raised when a PGN cannot be trusted as a complete legal game."""
@@ -84,7 +86,7 @@ def save_pgn(game_or_text: chess.pgn.Game | str, path: str | Path) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
             temporary_name = handle.name
-        os.replace(temporary_name, destination)
+        replace_with_retry(temporary_name, destination)
     finally:
         if temporary_name is not None:
             temporary = Path(temporary_name)

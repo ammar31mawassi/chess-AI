@@ -1,0 +1,17 @@
+# Explicit sources only; no evaluation PGNs enter training.
+composition:
+  output_path: data/datasets/stockfish_teacher_v1_replay.pt
+  output_weight_key: stockfish_training_weight
+  sources:
+    - name: stockfish_continuations
+      path: data/curricula/stockfish_teacher_v1/collection/dataset.pt
+      metadata_weight_key: actor_outcome_weight
+      group_key: opening_set_id
+    - name: joint_v3_historical_replay
+      path: data/datasets/joint_policy_value_v3.pt
+      metadata_weight_key: joint_training_weight
+      group_key: composition_group_id
+    - name: named_opening_rehearsal
+      path: data/datasets/all_chess_openings_v1.pt
+      metadata_weight_key: opening_frequency_weight
+      group_key: game_id
