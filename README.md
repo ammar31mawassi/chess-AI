@@ -192,6 +192,13 @@ data can make the model worse.
 
 ## Training workflow
 
+The separately executed local Stockfish teacher is now available through `stockfish-check` and
+`stockfish-batch`. It never participates in gameplay or starts training. Follow the ordered
+[Stockfish v1 PowerShell runbook](docs/stockfish_teacher.md) for unique artifacts, staged collection,
+resume, replay composition, CUDA training, gameplay selection, and fresh multi-seed audits.
+The [prioritized improvement roadmap](docs/model_improvement_comparison.md#stockfish-stage-roadmap)
+distinguishes the improvements implemented here from later self-play work.
+
 1. Generate labels from reproducibly seeded minimax/random games.
 2. Inspect the versioned dataset metadata and game mix.
 3. Train with a fixed whole-game or whole-opening-pair validation split.
@@ -287,7 +294,7 @@ cannot remove all hardware-dependent floating-point variation.
 - Dirichlet exploration noise
 - Self-play replay buffer and full reinforcement-learning loop
 - Candidate-versus-champion promotion criteria and parallel self-play workers
-- Stockfish/UCI and tactical-puzzle benchmarks
+- Limited-budget Stockfish gameplay and tactical-puzzle benchmarks (UCI teacher analysis is implemented)
 - Optional approved online-bot integration, kept separate from manual external mode
 
 These are documented future layers, not hidden or partial Phase 1 features.

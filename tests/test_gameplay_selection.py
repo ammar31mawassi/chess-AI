@@ -12,6 +12,7 @@ import pytest
 from chess_ai.arena.gameplay_selection import (
     GameplaySelectionConfig,
     _candidate_eligibility,
+    _candidate_paths,
     _choose_best_candidate,
     run_gameplay_selection,
 )
@@ -69,6 +70,15 @@ def test_gameplay_score_outranks_validation_loss() -> None:
     selected = _choose_best_candidate([lower_loss, stronger])
 
     assert selected is stronger
+
+
+def test_initialization_baseline_is_always_gameplay_eligible(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    model = PolicyValueNet(channels=4, residual_blocks=0)
+    baseline = config.candidate_checkpoint_dir / "baseline.pt"
+    save_checkpoint(baseline, model, epoch=0)
+    save_checkpoint(config.candidate_checkpoint_dir / "best.pt", model, epoch=1)
+    assert baseline in _candidate_paths(config)
 
 
 def test_selection_evaluates_all_epochs_without_promoting(

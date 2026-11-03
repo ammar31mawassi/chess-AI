@@ -1,0 +1,25 @@
+seed: 2037
+device: cuda
+training:
+  dataset_path: data/datasets/stockfish_teacher_v1_replay.pt
+  checkpoint_dir: checkpoints/stockfish_teacher_v1_candidate
+  metrics_path: data/metrics/stockfish_teacher_v1_candidate.jsonl
+  batch_size: 64
+  epochs: 60
+  learning_rate: 0.0000005
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  validation_fraction: 0.2
+  scheduler: true
+  legal_policy_mask: true
+  policy_loss_weight: 1.0
+  value_loss_weight: 0.1
+  selection_metric: validation_loss
+  early_stopping_patience: 20
+  early_stopping_min_delta: 0.00005
+  checkpoint_every: 5
+  baseline_eligible: true
+  game_balanced_sampling: true
+  validation_group_key: composition_group_id
+  sample_weight_key: stockfish_training_weight
+  log_every: 50

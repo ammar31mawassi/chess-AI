@@ -9,7 +9,7 @@ import logging
 import platform
 import sys
 from collections.abc import Callable, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -387,6 +387,45 @@ def command_teacher_batch(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_stockfish_check(args: argparse.Namespace) -> int:
+    """Verify a local teacher with one tiny independent position analysis."""
+    from chess_ai.data.stockfish_teacher import StockfishConfig, StockfishTeacher
+
+    config = StockfishConfig(
+        executable=args.executable,
+        source_commit=args.source_commit,
+        nodes=1000,
+        multipv=3,
+        timeout_seconds=args.timeout_seconds,
+    )
+    with StockfishTeacher(config) as teacher:
+        _, audit = teacher.analyze(chess.Board())
+        print(
+            json.dumps({"teacher": teacher.provenance, "sample": audit}, indent=2, sort_keys=True)
+        )
+    return 0
+
+
+def command_stockfish_batch(args: argparse.Namespace) -> int:
+    """Collect complete games, independently label, and finalize without training."""
+    from chess_ai.curriculum.stockfish_batch import StockfishBatchConfig, run_stockfish_batch
+
+    raw = dict(config_section(load_config(args.config), "stockfish_batch"))
+    if args.run_dir is not None:
+        raw["run_dir"] = str(args.run_dir)
+    engine = dict(raw["stockfish"])
+    if args.executable is not None:
+        engine["executable"] = str(args.executable)
+    if args.source_commit is not None:
+        engine["source_commit"] = args.source_commit
+    raw["stockfish"] = engine
+    summary = run_stockfish_batch(
+        StockfishBatchConfig.from_mapping(raw, device=args.device), stage=args.stage
+    )
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    return 0
+
+
 def command_mixed_batch(args: argparse.Namespace) -> int:
     """Collect a configured multi-matchup minimax-teacher dataset."""
 
@@ -509,6 +548,9 @@ def command_paired_audit(args: argparse.Namespace) -> int:
         exclude_manifest=args.exclude_manifest,
         search_simulations=args.search_simulations,
         c_puct=args.c_puct,
+        direct_baseline=args.direct_baseline,
+        additional_exclude_manifests=args.exclude_additional_manifest,
+        opening_book=args.opening_book,
     )
     print(json.dumps(summary.to_dict(), indent=2, sort_keys=True))
     print("Paired audit is evaluation-only; no training or checkpoint promotion was performed.")
@@ -538,6 +580,120 @@ def command_gameplay_select(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_stockfish_rebuild(args: argparse.Namespace) -> int:
+    from chess_ai.data.stockfish_rebuild import RebuildConfig, run_rebuild
+
+    config = RebuildConfig.from_mapping(
+        config_section(load_config(args.config), "stockfish_rebuild")
+    )
+    report = run_rebuild(config, args.stage, args.max_positions)
+    print(
+        json.dumps(
+            {
+                key: value
+                for key, value in report.items()
+                if key not in {"samples", "inputs", "shards", "binding"}
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def command_evaluate_position(args: argparse.Namespace) -> int:
+    import math
+
+    from chess_ai.environment.move_encoder import MoveEncoder
+    from chess_ai.model.checkpoint import load_checkpoint
+
+    board = chess.Board(args.fen)
+    if not board.is_valid() or board.is_game_over(claim_draw=True):
+        raise ValueError("Position evaluation requires a valid nonterminal board")
+    agent = NeuralAgent(args.checkpoint, device=args.device)
+    logits, value = agent.evaluate(board)
+    spec = load_checkpoint(args.checkpoint).metadata.get("value_target_spec")
+    encoder = MoveEncoder()
+    ranked = sorted(
+        board.legal_moves, key=lambda move: (-logits[encoder.encode(move)], move.uci())
+    )[:5]
+    estimated_cp = (
+        math.atanh(value) * spec["scale_cp"] if spec is not None and abs(value) < 1 else None
+    )
+    print(
+        json.dumps(
+            {
+                "fen": board.fen(),
+                "player_to_move": "white" if board.turn else "black",
+                "side_to_move_value": value,
+                "white_value": value if board.turn else -value,
+                "value_target_spec": spec,
+                "estimated_side_to_move_cp": estimated_cp,
+                "policy_top_moves": [move.uci() for move in ranked],
+                "note": "Network prediction; centipawn estimate is approximate and does not identify forced mate.",
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def command_diagnose_games(args: argparse.Namespace) -> int:
+    from chess_ai.arena.blunder_diagnostics import diagnose_selection_games
+    from chess_ai.data.stockfish_teacher import StockfishConfig
+
+    raw = load_config(args.config)
+    collection = config_section(raw, "stockfish_batch")
+    teacher = StockfishConfig.from_mapping(collection["stockfish"])
+    teacher = replace(teacher, nodes=args.nodes, depth=None, multipv=1, cache_dir=None)
+    report = diagnose_selection_games(
+        args.selection_report,
+        args.candidate,
+        teacher,
+        args.output,
+        openings=args.openings,
+        positions=args.positions_per_game,
+        seed=args.seed,
+    )
+    print(
+        json.dumps(
+            {
+                "output": str(args.output),
+                "models": {
+                    role: {key: value for key, value in model.items() if key != "games"}
+                    for role, model in report["models"].items()
+                },
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def command_diagnose_training(args: argparse.Namespace) -> int:
+    from chess_ai.training.diagnostics import diagnose_training
+    from chess_ai.training.trainer import TrainingConfig
+
+    raw = load_config(args.config)
+    config = TrainingConfig.from_mapping(
+        config_section(raw, "training"),
+        seed=_as_int(raw.get("seed"), name="seed", default=0),
+        device=args.device or str(raw.get("device", "auto")),
+    )
+    report = diagnose_training(config, args.checkpoint, args.output, source_key=args.source_key)
+    print(
+        json.dumps(
+            {
+                "output": str(args.output),
+                "validation_examples": report["validation_examples"],
+                "training_updates": 0,
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def command_train(args: argparse.Namespace) -> int:
     from chess_ai.model import PolicyValueNet, load_model
     from chess_ai.training import TrainingConfig, train_model
@@ -552,7 +708,17 @@ def command_train(args: argparse.Namespace) -> int:
         device=device,
         resume_from=args.resume,
     )
+    if (
+        args.resume is None
+        and args.init_checkpoint is None
+        and (config.metrics_path.exists() or any(config.checkpoint_dir.glob("*.pt")))
+    ):
+        raise ValueError(
+            "Fresh training outputs already exist; use --resume or reserve a new run ID"
+        )
     if args.init_checkpoint is not None:
+        from chess_ai.model.checkpoint import load_checkpoint
+
         source_directory = args.init_checkpoint.resolve().parent
         output_directory = config.checkpoint_dir.resolve()
         if output_directory == source_directory:
@@ -577,8 +743,17 @@ def command_train(args: argparse.Namespace) -> int:
                 f"candidate ({rendered}). Choose new training.checkpoint_dir and "
                 "training.metrics_path values, or intentionally archive the old run first."
             )
+        if (
+            config.value_target_spec is not None or args.init_checkpoint.is_file()
+        ) and load_checkpoint(args.init_checkpoint).metadata.get(
+            "value_target_spec"
+        ) != config.value_target_spec:
+            raise ValueError("Initialization checkpoint value semantics differ; use a fresh model")
         model = load_model(args.init_checkpoint, device="cpu", eval_mode=False)
     else:
+        import torch
+
+        torch.manual_seed(seed)
         model_values = config_section(raw, "model")
         channels = _as_int(model_values.get("channels"), name="model.channels", default=32)
         residual_blocks = _as_int(
@@ -877,7 +1052,7 @@ def build_parser() -> argparse.ArgumentParser:
     gui.add_argument(
         "--checkpoint",
         type=Path,
-        help="neural checkpoint (the GUI discovers a local best/last checkpoint if omitted)",
+        help="neural checkpoint (defaults to the promoted champion, then local discovery)",
     )
     gui.add_argument("--human-color", choices=("white", "black"), default="white")
     gui.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
@@ -889,10 +1064,10 @@ def build_parser() -> argparse.ArgumentParser:
     gui.add_argument(
         "--search-simulations",
         type=int,
-        default=0,
-        help="PUCT traversals after leaving the book; zero uses greedy neural play",
+        default=None,
+        help="PUCT traversals (promoted champion setting when discovered, otherwise zero); zero uses greedy play",
     )
-    gui.add_argument("--c-puct", type=float, default=1.5)
+    gui.add_argument("--c-puct", type=float, default=None, help="champion setting or 1.5")
     gui.add_argument(
         "--dataset-path",
         type=Path,
@@ -981,6 +1156,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     teacher_batch.set_defaults(handler=command_teacher_batch)
 
+    stockfish_check = subparsers.add_parser(
+        "stockfish-check", help="verify a local UCI teacher with a tiny analysis"
+    )
+    stockfish_check.add_argument("--executable", type=Path, required=True)
+    stockfish_check.add_argument("--source-commit", required=True)
+    stockfish_check.add_argument("--timeout-seconds", type=float, default=30.0)
+    stockfish_check.set_defaults(handler=command_stockfish_check)
+
+    stockfish_batch = subparsers.add_parser(
+        "stockfish-batch", help="games first, Stockfish labels second; no training"
+    )
+    stockfish_batch.add_argument("--config", type=Path, required=True)
+    stockfish_batch.add_argument(
+        "--stage", choices=("all", "games", "labels", "finalize"), default="all"
+    )
+    stockfish_batch.add_argument(
+        "--run-dir",
+        type=Path,
+        help="override every collection output with one unique run directory",
+    )
+    stockfish_batch.add_argument("--executable", type=Path)
+    stockfish_batch.add_argument("--source-commit")
+    stockfish_batch.add_argument("--device")
+    stockfish_batch.set_defaults(handler=command_stockfish_batch)
+
     mixed_batch = subparsers.add_parser(
         "mixed-batch",
         help="collect configured color-switched cohorts with stronger minimax labels",
@@ -1068,6 +1268,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     paired_audit.add_argument("--c-puct", type=float, default=1.5)
     paired_audit.add_argument(
+        "--opening-book", type=Path, help="same compiled runtime book for candidate and champion"
+    )
+    paired_audit.add_argument(
+        "--direct-baseline",
+        action="store_true",
+        help="also play the candidate directly against the baseline on the same suite",
+    )
+    paired_audit.add_argument(
+        "--exclude-additional-manifest",
+        type=Path,
+        action="append",
+        default=[],
+        help="exclude another historical replay manifest; may be repeated",
+    )
+    paired_audit.add_argument(
         "--pgn-dir",
         type=Path,
         default=Path("data/games/evaluation/paired_audit"),
@@ -1086,6 +1301,52 @@ def build_parser() -> argparse.ArgumentParser:
     gameplay_select.add_argument("--config", type=Path, required=True)
     gameplay_select.add_argument("--device", help="override the YAML neural-inference device")
     gameplay_select.set_defaults(handler=command_gameplay_select)
+
+    rebuild = subparsers.add_parser(
+        "stockfish-rebuild",
+        help="inventory and relabel existing training sources for joint position-evaluation learning",
+    )
+    rebuild.add_argument("--config", type=Path, required=True)
+    rebuild.add_argument(
+        "--stage", choices=("inventory", "pilot", "labels", "finalize"), required=True
+    )
+    rebuild.add_argument(
+        "--max-positions", type=int, help="optional bounded labels invocation; rerun to continue"
+    )
+    rebuild.set_defaults(handler=command_stockfish_rebuild)
+
+    position_eval = subparsers.add_parser(
+        "evaluate-position", help="inspect the neural value head and legal policy preferences"
+    )
+    position_eval.add_argument("--checkpoint", type=Path, required=True)
+    position_eval.add_argument("--fen", default=chess.STARTING_FEN)
+    position_eval.add_argument("--device", default="auto")
+    position_eval.set_defaults(handler=command_evaluate_position)
+
+    game_diagnose = subparsers.add_parser(
+        "diagnose-games", help="review bounded archived evaluation moves with local Stockfish"
+    )
+    game_diagnose.add_argument(
+        "--config", type=Path, required=True, help="existing collection config"
+    )
+    game_diagnose.add_argument("--selection-report", type=Path, required=True)
+    game_diagnose.add_argument("--candidate", type=Path, required=True)
+    game_diagnose.add_argument("--output", type=Path, required=True)
+    game_diagnose.add_argument("--nodes", type=int, default=5000)
+    game_diagnose.add_argument("--openings", type=int, default=2)
+    game_diagnose.add_argument("--positions-per-game", type=int, default=16)
+    game_diagnose.add_argument("--seed", type=int, default=2040)
+    game_diagnose.set_defaults(handler=command_diagnose_games)
+
+    diagnose = subparsers.add_parser(
+        "diagnose-training", help="evaluate held-out metrics separately for each dataset source"
+    )
+    diagnose.add_argument("--config", type=Path, required=True)
+    diagnose.add_argument("--checkpoint", type=Path, action="append", required=True)
+    diagnose.add_argument("--output", type=Path, required=True)
+    diagnose.add_argument("--source-key", default="composition_source")
+    diagnose.add_argument("--device", help="override the YAML inference device")
+    diagnose.set_defaults(handler=command_diagnose_training)
 
     train = subparsers.add_parser("train", help="train a policy-value model")
     train.add_argument("--config", type=Path, required=True)

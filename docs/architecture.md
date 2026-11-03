@@ -1,15 +1,58 @@
 # Architecture
 
+The [endgame pilot](endgame_pilot.md) adds bounded material/score sampling from approved
+training catalogs and grouped synthetic roots, protects historical evaluation inputs,
+and reserves separate development/confirmation positions. Its resumable label journal
+uses the existing cp-tanh values and an optional mate-distance policy preference.
+Offline endgame diagnosis and per-ply resumable unassisted rollouts remain evaluation-only.
+The registered champion and inference behavior are unchanged.
+
+The [matched retention experiment](endgame_retention.md) adds optional fixed BatchNorm
+statistics during fine-tuning, with trainable affine parameters and resume-mode checks.
+Its two arms reuse the frozen endgame replay. A separate hash-bound public-archive
+collector validates and freezes 500 games per verified GM without importing training data.
+
+The [GM endgame import](gm_endgame_training.md) explicitly validates the combined snapshot,
+joins transposing/mirrored games before splitting, protects historical holdouts and JSON
+rollout paths, and caps correlated positions per game. It reuses the resumable endgame
+exclusion/Stockfish journals and compatible cp-tanh tensor finalizer. A signed import
+receipt precedes labeling; confirmation components stay outside training and replay.
+
+The [full GM rebuild](full_gm_rebuild.md) pins the previous archive selections while
+adding 500 games per player, then inventories all phases of the combined 3,000 games.
+It references compatible existing labels, journals exclusions/new labels in SQLite,
+deduplicates network inputs, and exports memory-mapped evaluation-target shards.
+Separate scratch and initialized training arms use the same source corpus with
+explicit general/endgame/mating exposure shares; champion and holdouts stay protected.
+
 ## Phase 1 boundary
 
 This repository is a supervised-bootstrap vertical slice. It has a reliable chess environment,
 classical agents, a compact policy-value network, local data/training tools, a focused neural-play
 GUI, controlled evaluation, and a small deterministic PUCT inference agent. It deliberately does
 **not** claim to be AlphaZero: search does not yet generate self-play training targets, inference is
-not batched, and there is no reinforcement-learning loop or automated interaction with external
-chess software.
+not batched, and there is no reinforcement-learning loop or automation of external chess GUIs or
+websites. Separately executed local Stockfish UCI teacher analysis is an explicitly authorized layer.
 
 ## Dependency flow
+
+The Stockfish evaluation rebuild inventories explicit training sources, recovers full games for
+both colors, and journals independent analysis in SQLite. Deduplicated, grouped splits produce
+version-2 evaluation-target shards and a versioned manifest with memory-mapped tensor loading.
+Fresh joint training uses existing PUCT to make the value head affect decisions. Selection/audits
+can separately enable the same opening book for both checkpoints. See [the rebuild workflow](stockfish_rebuild.md)
+for commands, value semantics, source boundaries, and encoder history/counter limitations.
+
+The next [champion refinement stage](stockfish_refinement.md) extends the signed collector with
+version-2 PUCT gameplay, four extra standard-start book games, and all-move evaluation targets.
+Per-game shards retain every move's analysis; the training dataset deduplicates network inputs.
+Bounded replay protects the original holdout inputs and mixes equal fresh/old position counts.
+Version-1 collection signatures and outcome-label behavior remain compatible.
+
+An explicit [personal-PGN teacher workflow](personal_stockfish_training.md) validates local Chess.com
+archives, freezes their bytes, and feeds PGN-only inputs to the same resumable position-label journal.
+Historical moves select positions; Stockfish supplies all policy/value labels. Replay and subsequent
+gameplay checks use the promoted evaluation-head model without importing benchmark games.
 
 ```text
 python-chess
@@ -104,6 +147,11 @@ Keeping these arrows mostly one-way makes it possible to learn and test one laye
   Fresh initialization may keep epoch zero eligible, so an update that never improves the selected
   metric cannot silently replace its source. Optional patience/minimum-delta stopping bounds long
   runs, while sparse periodic epoch retention avoids writing hundreds of redundant checkpoints.
+  Optional explicit source multipliers adjust training exposure after inverse-game-length
+  weighting, without changing per-example loss weights or validation. Both remain deterministically
+  seeded. Optional per-source holdout inference writes additive `validation_by_source` metrics;
+  legacy configs leave it disabled. `training/diagnostics.py` reproduces the exact grouped split
+  without optimization and reports expected sampler/source coverage plus checkpoint comparisons.
 - `curriculum/` runs the controlled student/opponent/teacher loop. Each cycle gives one seeded
   post-opening position to the student as White and Black against a fixed shallow minimax opponent.
   A stronger minimax teacher labels only positions where the neural student moved. Corrections are
@@ -231,6 +279,14 @@ where practical so interruption does not leave a half-written checkpoint or data
 Generated artifacts live under `data/` and `checkpoints/` and are ignored by Git. Empty `.gitkeep`
 files retain the expected directory layout.
 
+Manual gameplay promotion uses a separate `checkpoints/champion.json` record with format
+`self-improving-chess-ai.gameplay-champion`, version 1. It binds a checkpoint path relative to
+`checkpoints/`, its SHA-256, and `inference.search_simulations`, `c_puct`, and `opening_book` (null
+for this model-only record version). The GUI prioritizes this record and checks its checksum before
+using the frozen copy. It fails on invalid records instead of switching to an unpromoted model.
+Explicit GUI checkpoint/search options override discovery. Evaluation evidence and the previous
+champion are recorded with the promotion; training/selection never update this pointer implicitly.
+
 Teacher-cycle state has its own format name/version and a signature over all reproducibility
 settings. Resuming rejects edited settings, missing PGNs/corrections, mismatched checkpoint epochs,
 and output files that exist without their matching state. Correction datasets retain the ordinary
@@ -280,5 +336,62 @@ training-compatible output.
 
 The intended next stages are batched PUCT leaf evaluation, root Dirichlet exploration, search-visit
 policy targets, a bounded self-play replay window, confidence-aware candidate promotion, parallel
-self-play, UCI/Stockfish and tactical-puzzle benchmarks, then a full reinforcement-learning loop.
+self-play, limited-strength Stockfish gameplay and tactical-puzzle benchmarks, then a full reinforcement-learning loop.
 Optional online play would require an approved bot API and a separate safety/design review.
+
+## Stockfish teacher v1
+
+`data/stockfish_teacher.py` owns one local subprocess using python-chess's UCI protocol. It validates
+positions and entire PVs with python-chess, uses side-to-move scores, and builds a dense 4,208-action
+softmax with zero mass on all illegal and unanalyzed actions. These are score-based top-MultiPV
+targets, not root-visit distributions. Centipawns and signed mate distance remain auditable; mate
+conversion uses python-chess's bounded centipawn mapping and evaluation metadata uses `tanh(cp/600)`.
+
+Each independent FEN starts with Clear Hash and a fresh UCI game identity. FEN-only analysis has no
+repetition history: the FEN's clocks/castling/en-passant state remain intact. An explicit coroutine
+deadline bounds fixed-node/depth searches, because SimpleEngine's ordinary timeout does not bound
+these search limits. Streaming info retains the deepest complete exact MultiPV iteration when a
+node budget ends during the next iteration. A snapshot consists of contiguous ranks 1–N at one
+depth with distinct roots and exact scores. Partial snapshots, mixed-depth updates, and bound-only
+lines never overwrite a saved complete snapshot or become labels. This prevents reordered final
+updates from mixing root moves across iterations; version-1 provenance and resume signatures remain
+compatible.
+
+`curriculum/stockfish_batch.py` has three one-way phases. First, six games per shared opening are
+archived with the neural checkpoint frozen: neural versus D1, neural versus D2, and D2 versus D1,
+each in both colors. Only after all games finish does Stockfish label a bounded, seeded sample of
+continuation positions. Finalization assembles committed per-game label shards. No trainer or
+optimizer is reachable from this module. Outcome/value semantics and dataset tensor version 1 are
+unchanged; evaluations are separate metadata. Game-balanced sampling and whole-opening validation
+remain in the existing trainer. Epoch 120 stays immutable; a new candidate has a new optimizer.
+
+State and manifest have their own `stockfish-offline-batch` format/version 1. The signature binds
+every collection setting, frozen checkpoint digest, exact engine source commit, binary digest,
+reported engine identity, UCI defaults/settings, optional external NNUE digests, and analysis
+convention. Cache keys additionally bind the exact FEN. Unknown state versions, configuration drift,
+missing or modified committed PGNs/shards, and corrupted final artifacts fail explicitly.
+
+Every transaction reserves its exact owned destination in atomic state before writing. A stopped
+process can retry only that uncommitted transaction; committed outputs are verified and preserved.
+Final dataset/manifest writes use the same journal. Once complete, the run cannot grow. An exclusive
+writer lock prevents two collectors from modifying one run; Ctrl+C releases it, while a hard kill
+requires checking the recorded PID before explicitly removing the stale lock. Temporary files are
+never treated as committed shards.
+
+Stockfish's source, embedded NNUE, executable, and build provenance stay in ignored
+`references/github/` directories. The GPL-3.0 engine is executed separately, never copied into this
+project's source tree. Build outputs include its license and a pointer to the exact upstream source.
+See [the runbook](stockfish_teacher.md) for the command/schema contract and limits.
+
+Paired audits now report W/D/L/points by color and standard/varied starts, flag regressions, and
+provide a seeded bootstrap over whole varied opening pairs. Optional direct-baseline matches use
+the same suite. Additional historical manifests can be excluded. This uncertainty is descriptive;
+checkpoint-selection bias and repeated deterministic starts require fresh suites and several seeds.
+Gameplay selection explicitly includes `baseline.pt`. No selection or audit automatically promotes.
+
+`arena/blunder_diagnostics.py` reviews a bounded deterministic subset of archived selection games
+with separate best-root/forced-root local UCI searches. Legal moves and PVs come from python-chess;
+the scores estimate loss rather than prove tactical correctness. Reports and reviewed PGNs remain
+evaluation-only. Source diagnostics, game diagnostics, and matched-experiment manifests use distinct
+version-1 formats; their additive training config/metric fields do not change checkpoint/dataset
+tensor semantics. See [the sampling diagnosis and runbook](stockfish_sampling_ablation.md).

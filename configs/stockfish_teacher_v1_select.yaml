@@ -1,0 +1,19 @@
+seed: 10060205
+device: cuda
+gameplay_selection:
+  champion_checkpoint: checkpoints/joint_policy_value_v3/epoch_0120.pt
+  candidate_checkpoint_dir: checkpoints/stockfish_teacher_v1_candidate
+  training_manifest: data/curricula/stockfish_teacher_v1/collection/manifest.json
+  additional_training_manifests:
+    - data/curricula/gen1_vs_d1_d2_teacher_500/manifest.json
+    - data/curricula/minimax_d1_d2_d3_3000/manifest.json
+  report_path: data/games/evaluation/stockfish_teacher_v1_selection/report.json
+  pgn_dir: data/games/evaluation/stockfish_teacher_v1_selection
+  opponent_depths: [1, 2]
+  openings: 16
+  opening_min_full_moves: 2
+  opening_max_full_moves: 5
+  max_plies: 200
+  minimum_aggregate_improvement_points: 1.0
+  require_depth_non_regression: true
+  require_standard_non_regression: true

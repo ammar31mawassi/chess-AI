@@ -31,6 +31,7 @@ from chess_ai.gui.session_training import (
     run_session_training,
     update_session_dataset_path,
 )
+from chess_ai.storage.champion import load_gameplay_champion
 
 DEFAULT_DATASET_PATH = Path("data/datasets/human_gui.pt")
 DEFAULT_PGN_DIR = Path("data/games/human_gui")
@@ -88,6 +89,9 @@ def discover_default_checkpoint(root: str | Path = "checkpoints") -> Path | None
     """Find the most useful local checkpoint without downloading anything."""
 
     checkpoint_root = Path(root)
+    champion = load_gameplay_champion(checkpoint_root)
+    if champion is not None:
+        return champion.checkpoint
     human_session_root = checkpoint_root / "human_sessions"
     if human_session_root.is_dir():
         human_candidates = sorted(
@@ -121,6 +125,38 @@ def discover_default_checkpoint(root: str | Path = "checkpoints") -> Path | None
     return latest_candidates[0] if latest_candidates else None
 
 
+def resolve_gui_defaults(
+    checkpoint: str | Path | None = None,
+    search_simulations: int | None = None,
+    c_puct: float | None = None,
+    *,
+    checkpoint_root: str | Path = "checkpoints",
+) -> tuple[Path | None, int, float]:
+    """Apply promoted settings only when no explicit checkpoint was requested."""
+
+    champion = load_gameplay_champion(checkpoint_root) if checkpoint is None else None
+    discovered: Path | None
+    if champion is not None:
+        discovered = champion.checkpoint
+        simulations = (
+            champion.search_simulations if search_simulations is None else search_simulations
+        )
+        exploration = champion.c_puct if c_puct is None else c_puct
+    else:
+        discovered = (
+            Path(checkpoint)
+            if checkpoint is not None
+            else discover_default_checkpoint(checkpoint_root)
+        )
+        simulations = 0 if search_simulations is None else search_simulations
+        exploration = 1.5 if c_puct is None else c_puct
+    if isinstance(simulations, bool) or not isinstance(simulations, int) or simulations < 0:
+        raise ValueError("search_simulations must be a non-negative integer")
+    if isinstance(exploration, bool) or not math.isfinite(exploration) or exploration <= 0:
+        raise ValueError("c_puct must be finite and positive")
+    return discovered, simulations, exploration
+
+
 @dataclass(frozen=True, slots=True)
 class _AiResult:
     token: int
@@ -148,8 +184,8 @@ class NeuralChessApp:
         human_color: str = "white",
         device: str = "auto",
         opening_book: str | Path | None = None,
-        search_simulations: int = 0,
-        c_puct: float = 1.5,
+        search_simulations: int | None = None,
+        c_puct: float | None = None,
         dataset_path: str | Path = DEFAULT_DATASET_PATH,
         pgn_dir: str | Path = DEFAULT_PGN_DIR,
         training_enabled: bool = False,
@@ -159,20 +195,16 @@ class NeuralChessApp:
         self.root.geometry("1080x720")
         self.root.minsize(880, 600)
 
-        discovered = Path(checkpoint) if checkpoint is not None else discover_default_checkpoint()
+        discovered, simulations, exploration = resolve_gui_defaults(
+            checkpoint, search_simulations, c_puct
+        )
         self.checkpoint_var = tk.StringVar(value=str(discovered or ""))
         self.human_color_var = tk.StringVar(value=human_color)
         self.device_var = tk.StringVar(value=device)
         self.training_var = tk.BooleanVar(value=training_enabled)
         self.opening_book = Path(opening_book) if opening_book is not None else None
-        if isinstance(search_simulations, bool) or not isinstance(search_simulations, int):
-            raise ValueError("search_simulations must be a non-negative integer")
-        if search_simulations < 0:
-            raise ValueError("search_simulations must be a non-negative integer")
-        if not math.isfinite(c_puct) or c_puct <= 0.0:
-            raise ValueError("c_puct must be finite and positive")
-        self.search_simulations = search_simulations
-        self.c_puct = c_puct
+        self.search_simulations = simulations
+        self.c_puct = exploration
         self.dataset_var = tk.StringVar(value=str(dataset_path))
         self.status_var = tk.StringVar(value="Choose a checkpoint, then start a new game.")
         self.session_var = tk.StringVar(value="Preparing automatic training files...")
@@ -1174,8 +1206,8 @@ def launch_gui(
     human_color: str = "white",
     device: str = "auto",
     opening_book: str | Path | None = None,
-    search_simulations: int = 0,
-    c_puct: float = 1.5,
+    search_simulations: int | None = None,
+    c_puct: float | None = None,
     dataset_path: str | Path = DEFAULT_DATASET_PATH,
     pgn_dir: str | Path = DEFAULT_PGN_DIR,
     training_enabled: bool = False,

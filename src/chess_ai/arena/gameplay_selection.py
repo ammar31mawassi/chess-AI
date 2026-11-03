@@ -46,8 +46,22 @@ class GameplaySelectionConfig:
     require_standard_non_regression: bool = True
     seed: int = 9_700_205
     device: str = "auto"
+    additional_training_manifests: tuple[Path, ...] = ()
+    search_simulations: int = 0
+    c_puct: float = 1.5
+    opening_book: Path | None = None
 
     def __post_init__(self) -> None:
+        if (
+            isinstance(self.search_simulations, bool)
+            or not isinstance(self.search_simulations, int)
+            or self.search_simulations < 0
+        ):
+            raise ValueError("search_simulations must be a non-negative integer")
+        if not math.isfinite(self.c_puct) or self.c_puct <= 0:
+            raise ValueError("c_puct must be finite and positive")
+        if self.opening_book is not None:
+            object.__setattr__(self, "opening_book", Path(self.opening_book))
         for name in (
             "champion_checkpoint",
             "candidate_checkpoint_dir",
@@ -57,6 +71,11 @@ class GameplaySelectionConfig:
         ):
             object.__setattr__(self, name, Path(getattr(self, name)))
         object.__setattr__(self, "opponent_depths", tuple(self.opponent_depths))
+        object.__setattr__(
+            self,
+            "additional_training_manifests",
+            tuple(Path(path) for path in self.additional_training_manifests),
+        )
         if not self.opponent_depths or any(
             isinstance(depth, bool) or not isinstance(depth, int) or depth <= 0
             for depth in self.opponent_depths
@@ -184,6 +203,9 @@ def _validation_loss(checkpoint: LoadedCheckpoint) -> float:
 
 def _candidate_paths(config: GameplaySelectionConfig) -> list[Path]:
     paths = sorted(config.candidate_checkpoint_dir.glob("epoch_*.pt"))
+    baseline = config.candidate_checkpoint_dir / "baseline.pt"
+    if baseline.is_file():
+        paths.insert(0, baseline)
     best_path = config.candidate_checkpoint_dir / "best.pt"
     if best_path.is_file():
         best = load_checkpoint(best_path, map_location="cpu")
@@ -251,6 +273,10 @@ def _choose_best_candidate(candidates: Sequence[Mapping[str, Any]]) -> Mapping[s
 
 def run_gameplay_selection(config: GameplaySelectionConfig) -> GameplaySelectionSummary:
     """Evaluate every epoch through gameplay and select without promotion."""
+    if config.opening_book is not None:
+        from chess_ai.data.opening_book import load_opening_book
+
+        load_opening_book(config.opening_book)
 
     for path, label in (
         (config.champion_checkpoint, "Champion checkpoint"),
@@ -273,6 +299,8 @@ def run_gameplay_selection(config: GameplaySelectionConfig) -> GameplaySelection
         candidates.append((path, loaded))
 
     excluded_fens = _excluded_opening_fens(config.training_manifest)
+    for additional in config.additional_training_manifests:
+        excluded_fens.update(_excluded_opening_fens(additional))
     suite = _opening_suite(
         openings=config.openings,
         seed=config.seed,
@@ -282,10 +310,17 @@ def run_gameplay_selection(config: GameplaySelectionConfig) -> GameplaySelection
     )
 
     def evaluate(path: Path, role: str) -> dict[str, Any]:
-        depth_results: dict[str, dict[str, float | int]] = {}
+        depth_results: dict[str, dict[str, Any]] = {}
         depth_games: dict[str, list[dict[str, Any]]] = {}
         for depth in config.opponent_depths:
             key = f"d{depth}"
+            inference_options: dict[str, Any] = {}
+            if config.search_simulations:
+                inference_options.update(
+                    search_simulations=config.search_simulations, c_puct=config.c_puct
+                )
+            if config.opening_book is not None:
+                inference_options["opening_book"] = config.opening_book
             stats, games = _checkpoint_results(
                 path,
                 role=f"{role}_{key}",
@@ -295,6 +330,7 @@ def run_gameplay_selection(config: GameplaySelectionConfig) -> GameplaySelection
                 seed=config.seed + depth * 10_007,
                 device=config.device,
                 pgn_dir=config.pgn_dir,
+                **inference_options,
             )
             depth_results[key] = stats
             depth_games[key] = games
@@ -332,11 +368,20 @@ def run_gameplay_selection(config: GameplaySelectionConfig) -> GameplaySelection
         "kind": "gameplay_epoch_selection",
         "selection_seed": config.seed,
         "training_manifest": str(config.training_manifest),
+        "additional_training_manifests": [
+            str(path) for path in config.additional_training_manifests
+        ],
         "openings": [
             {"index": index, "fen": board.fen(), "moves": moves, "seed": opening_seed}
             for index, (board, moves, opening_seed) in enumerate(suite)
         ],
         "opponent_depths": list(config.opponent_depths),
+        "search_simulations": config.search_simulations,
+        "c_puct": config.c_puct,
+        "opening_book": str(config.opening_book) if config.opening_book is not None else None,
+        "opening_book_sha256": _sha256_file(config.opening_book)
+        if config.opening_book is not None
+        else None,
         "games_per_checkpoint": config.openings * 2 * len(config.opponent_depths),
         "minimum_aggregate_improvement_points": config.minimum_aggregate_improvement_points,
         "require_depth_non_regression": config.require_depth_non_regression,

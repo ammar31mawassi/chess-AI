@@ -22,6 +22,8 @@ data/gui_sessions/*
 !data/gui_sessions/.gitkeep
 data/curricula/
 data/opening_books/
+data/experiments/**/relabel/
+data/experiments/**/teacher_cache/
 checkpoints/*
 !checkpoints/.gitkeep
 

@@ -10,7 +10,7 @@ import random
 import time
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, Literal
 
@@ -31,6 +31,7 @@ from chess_ai.data.examples import (
     load_dataset,
     split_examples_by_group,
 )
+from chess_ai.data.value_targets import validate_value_spec
 from chess_ai.environment.move_encoder import MoveEncoder
 from chess_ai.model.checkpoint import load_checkpoint, save_checkpoint
 from chess_ai.model.policy_value_net import PolicyValueNet
@@ -70,6 +71,9 @@ class TrainingConfig:
     sample_weight_key: str | None = None
     game_balanced_sampling: bool = False
     validation_group_key: str = "game_id"
+    validation_source_key: str | None = None
+    sampling_source_key: str = "composition_source"
+    source_sampling_multipliers: dict[str, float] = field(default_factory=dict)
     l2_regularization: float | None = None
     gradient_clip: float = 1.0
     gradient_clip_norm: float | None = None
@@ -80,13 +84,20 @@ class TrainingConfig:
     early_stopping_min_delta: float = 0.0
     checkpoint_every: int = 1
     baseline_eligible: bool = False
+    freeze_batch_norm_statistics: bool = False
     seed: int = 0
     device: str = "auto"
     num_workers: int = 0
     log_every: int = 20
     resume_from: Path | None = None
+    value_target_spec: dict[str, Any] | None = None
+    use_dataset_split: bool = False
 
     def __post_init__(self) -> None:
+        if self.value_target_spec is not None:
+            validate_value_spec(self.value_target_spec)
+        if not isinstance(self.use_dataset_split, bool):
+            raise ValueError("use_dataset_split must be a boolean")
         for name in ("dataset_path", "resume_from"):
             value = getattr(self, name)
             if value is not None:
@@ -134,12 +145,35 @@ class TrainingConfig:
             raise ValueError("checkpoint_every must be positive")
         if not isinstance(self.baseline_eligible, bool):
             raise ValueError("baseline_eligible must be a boolean")
+        if not isinstance(self.freeze_batch_norm_statistics, bool):
+            raise ValueError("freeze_batch_norm_statistics must be a boolean")
         if self.sample_weight_key is not None and not self.sample_weight_key.strip():
             raise ValueError("sample_weight_key must be a non-empty string when configured")
         if not isinstance(self.game_balanced_sampling, bool):
             raise ValueError("game_balanced_sampling must be a boolean")
         if not isinstance(self.validation_group_key, str) or not self.validation_group_key.strip():
             raise ValueError("validation_group_key must be a non-empty string")
+        if self.validation_source_key is not None and (
+            not isinstance(self.validation_source_key, str)
+            or not self.validation_source_key.strip()
+        ):
+            raise ValueError("validation_source_key must be a non-empty string when configured")
+        if not isinstance(self.sampling_source_key, str) or not self.sampling_source_key.strip():
+            raise ValueError("sampling_source_key must be a non-empty string")
+        if not isinstance(self.source_sampling_multipliers, dict):
+            raise ValueError("source_sampling_multipliers must be a mapping")
+        for source, multiplier in self.source_sampling_multipliers.items():
+            if (
+                not isinstance(source, str)
+                or not source.strip()
+                or isinstance(multiplier, bool)
+                or not isinstance(multiplier, (int, float))
+                or not math.isfinite(multiplier)
+                or multiplier <= 0
+            ):
+                raise ValueError(
+                    "Source sampling names must be non-empty and multipliers finite positive numbers"
+                )
 
     @property
     def resolved_l2(self) -> float:
@@ -182,6 +216,9 @@ class TrainingConfig:
         """Return only portable primitive values."""
 
         raw = asdict(self)
+        if not self.freeze_batch_norm_statistics:
+            # Keep legacy metadata unchanged when the opt-in mode is disabled.
+            raw.pop("freeze_batch_norm_statistics")
         for key, value in tuple(raw.items()):
             if isinstance(value, Path):
                 raw[key] = str(value)
@@ -225,6 +262,7 @@ class EpochMetrics:
     selection_metric: str = "validation_loss"
     selection_value: float = math.inf
     early_stopped: bool = False
+    validation_by_source: dict[str, dict[str, float | int]] = field(default_factory=dict)
 
     @property
     def number_of_examples(self) -> int:
@@ -330,6 +368,29 @@ def _training_weight(example: TrainingExample, key: str | None) -> float:
     return weight
 
 
+def training_sampling_weights(
+    examples: Sequence[TrainingExample], config: TrainingConfig
+) -> list[float]:
+    """Keep game balancing, with optional explicit source exposure multipliers."""
+    game_counts = Counter(example.game_id for example in examples)
+    weights = [
+        1.0 / game_counts[example.game_id] if config.game_balanced_sampling else 1.0
+        for example in examples
+    ]
+    if config.source_sampling_multipliers:
+        groups = Trainer.source_indices(examples, config.sampling_source_key)
+        unknown = set(config.source_sampling_multipliers) - set(groups)
+        if unknown:
+            raise TrainingError(
+                f"Configured sampling sources absent from training: {', '.join(sorted(unknown))}"
+            )
+        for source, indices in groups.items():
+            multiplier = config.source_sampling_multipliers.get(source, 1.0)
+            for index in indices:
+                weights[index] *= multiplier
+    return weights
+
+
 class _TrainerDataset(Dataset[tuple[Tensor, Tensor, Tensor, Tensor, Tensor]]):
     """Attach optional sample weights and legal masks to ordinary examples."""
 
@@ -418,6 +479,7 @@ class Trainer:
         self.epochs_without_improvement = 0
         self.baseline_eligible = config.baseline_eligible
         self._resume_loaded = False
+        self._dataset_signature: str | None = None
 
     def _resume_if_requested(self) -> None:
         if self._resume_loaded or self.config.resume_from is None:
@@ -430,10 +492,30 @@ class Trainer:
             map_location=self.device,
         )
         saved_dataset_version = loaded.metadata.get("dataset_version")
-        if saved_dataset_version not in (None, DATASET_VERSION):
+        if saved_dataset_version not in (None, 1, 2):
             raise TrainingError(
                 "Resume checkpoint was trained from incompatible dataset format version "
                 f"{saved_dataset_version!r}; this code supports version {DATASET_VERSION}."
+            )
+        if loaded.metadata.get("value_target_spec") != self.config.value_target_spec:
+            raise TrainingError(
+                "Resume checkpoint value semantics differ from this training config"
+            )
+        saved_training = loaded.metadata.get("training_config") or {}
+        if (
+            saved_training.get("freeze_batch_norm_statistics", False)
+            != self.config.freeze_batch_norm_statistics
+        ):
+            raise TrainingError(
+                "Resume checkpoint used different BatchNorm statistics behavior; "
+                "start a separate run with --init-checkpoint to change it"
+            )
+        if (
+            self.config.value_target_spec is not None
+            and (loaded.extra or {}).get("dataset_signature") != self._dataset_signature
+        ):
+            raise TrainingError(
+                "Resume evaluation dataset differs from the checkpoint's frozen dataset"
             )
         self.start_epoch = loaded.epoch + 1
         raw_best = (loaded.extra or {}).get("best_validation_loss")
@@ -480,9 +562,10 @@ class Trainer:
             self.config.sample_weight_key,
         )
         sampler: WeightedRandomSampler | None = None
-        if training and self.config.game_balanced_sampling:
-            game_counts = Counter(example.game_id for example in examples)
-            sampling_weights = [1.0 / game_counts[example.game_id] for example in examples]
+        if training and (
+            self.config.game_balanced_sampling or self.config.source_sampling_multipliers
+        ):
+            sampling_weights = training_sampling_weights(examples, self.config)
             sampler = WeightedRandomSampler(
                 sampling_weights,
                 num_samples=len(examples),
@@ -514,6 +597,12 @@ class Trainer:
             legal_masks=legal_masks,
         )
         self.model.train(training)
+        if training and self.config.freeze_batch_norm_statistics:
+            # BatchNorm eval mode uses and preserves the checkpoint's running
+            # statistics. Affine scale/bias remain trainable; other layers train.
+            for module in self.model.modules():
+                if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+                    module.eval()
         aggregate = _Aggregate()
         context = torch.enable_grad() if training else torch.no_grad()
         with context:
@@ -636,6 +725,48 @@ class Trainer:
         return aggregate.averages()
 
     @staticmethod
+    def source_indices(
+        examples: Sequence[TrainingExample], source_key: str
+    ) -> dict[str, list[int]]:
+        """Require explicit source labels; never silently drop unlabelled examples."""
+        if not isinstance(source_key, str) or not source_key.strip():
+            raise TrainingError("source_key must be a non-empty string")
+        groups: dict[str, list[int]] = {}
+        for index, example in enumerate(examples):
+            source = example.metadata.get(source_key)
+            if not isinstance(source, str) or not source.strip():
+                raise TrainingError(
+                    f"Example {example.game_id!r} lacks source label {source_key!r}"
+                )
+            groups.setdefault(source, []).append(index)
+        return groups
+
+    def evaluate_by_source(
+        self,
+        examples: Sequence[TrainingExample],
+        *,
+        source_key: str,
+        legal_masks: npt.NDArray[np.bool_] | None = None,
+    ) -> dict[str, dict[str, float | int]]:
+        """Evaluate every held-out row once per source, without optimizer updates."""
+        groups = self.source_indices(examples, source_key)
+        if legal_masks is None and self.config.legal_policy_mask:
+            legal_masks = self._build_legal_masks(examples)
+        if legal_masks is not None and len(legal_masks) != len(examples):
+            raise TrainingError("Legal masks and source examples must have the same length")
+        result: dict[str, dict[str, float | int]] = {}
+        for source, indices in sorted(groups.items()):
+            rows = [examples[index] for index in indices]
+            values = self._run_epoch(
+                rows,
+                training=False,
+                epoch=0,
+                legal_masks=legal_masks[indices] if legal_masks is not None else None,
+            )
+            result[source] = {"examples": len(rows), **values}
+        return result
+
+    @staticmethod
     def _build_legal_masks(
         examples: Sequence[TrainingExample],
     ) -> npt.NDArray[np.bool_]:
@@ -673,10 +804,42 @@ class Trainer:
             source = self.config.dataset_path
         if isinstance(source, (str, Path)):
             source = load_dataset(source)
+        if isinstance(source, LoadedDataset):
+            if source.metadata.get("value_target_spec") != self.config.value_target_spec:
+                raise TrainingError(
+                    "Dataset value semantics differ from training.value_target_spec"
+                )
+            self._dataset_signature = (
+                str(source.metadata["dataset_signature"])
+                if "dataset_signature" in source.metadata
+                else None
+            )
+        elif self.config.value_target_spec is not None:
+            raise TrainingError("Evaluation training requires a versioned LoadedDataset")
         all_examples = list(source.examples if isinstance(source, LoadedDataset) else source)
         if not all_examples:
             raise TrainingError("The training dataset contains no examples")
 
+        if self.config.use_dataset_split:
+            if (
+                not isinstance(source, LoadedDataset)
+                or source.metadata.get("explicit_split") is not True
+                or validation_examples is not None
+            ):
+                raise TrainingError("use_dataset_split requires the versioned evaluation manifest")
+            training = [item for item in all_examples if item.metadata.get("split") == "train"]
+            validation = [
+                item for item in all_examples if item.metadata.get("split") == "validation"
+            ]
+            if (
+                not training
+                or not validation
+                or len(training) + len(validation) != len(all_examples)
+            ):
+                raise TrainingError(
+                    "Explicit dataset split must contain both train and validation rows"
+                )
+            return training, validation
         if validation_examples is None:
             training, validation = split_examples_by_group(
                 all_examples,
@@ -743,6 +906,7 @@ class Trainer:
             "selection_metric": self.config.selection_metric,
             "best_selection_score": self.best_selection_score,
             "epochs_without_improvement": self.epochs_without_improvement,
+            "dataset_signature": self._dataset_signature,
         }
 
     def _save_baseline(self, values: Mapping[str, float]) -> None:
@@ -767,7 +931,7 @@ class Trainer:
                 epoch=0,
                 metrics=metrics,
                 training_config=self.config.checkpoint_metadata(),
-                dataset_version=DATASET_VERSION,
+                dataset_version=2 if self.config.value_target_spec is not None else DATASET_VERSION,
                 extra=self._checkpoint_extra(),
             )
 
@@ -793,7 +957,7 @@ class Trainer:
                 epoch=metrics.epoch,
                 metrics=metrics.to_dict(),
                 training_config=self.config.checkpoint_metadata(),
-                dataset_version=DATASET_VERSION,
+                dataset_version=2 if self.config.value_target_spec is not None else DATASET_VERSION,
                 extra=self._checkpoint_extra(),
             )
 
@@ -823,6 +987,11 @@ class Trainer:
         """Train through ``config.epochs`` and return newly completed epochs."""
 
         training, validation = self._prepare_examples(examples, validation_examples)
+        if self.config.validation_source_key is not None:
+            self.source_indices(training, self.config.validation_source_key)
+            self.source_indices(validation, self.config.validation_source_key)
+        if self.config.source_sampling_multipliers:
+            training_sampling_weights(training, self.config)
         training_legal_masks = (
             self._build_legal_masks(training) if self.config.legal_policy_mask else None
         )
@@ -888,6 +1057,15 @@ class Trainer:
                     )
                     if validation
                     else None
+                )
+                source_values = (
+                    self.evaluate_by_source(
+                        validation,
+                        source_key=self.config.validation_source_key,
+                        legal_masks=validation_legal_masks,
+                    )
+                    if self.config.validation_source_key is not None and validation
+                    else {}
                 )
             except RuntimeError as exc:
                 self._raise_helpful_oom(exc, self.device)
@@ -973,6 +1151,7 @@ class Trainer:
                 selection_metric=self.config.selection_metric,
                 selection_value=selection_value,
                 early_stopped=early_stopped,
+                validation_by_source=source_values,
             )
             retain_epoch = (
                 epoch % self.config.checkpoint_every == 0

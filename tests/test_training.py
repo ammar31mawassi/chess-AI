@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import chess
@@ -15,6 +16,7 @@ from chess_ai.data.dataset_generator import generate_game_examples, result_value
 from chess_ai.environment.board_encoder import BoardEncoder
 from chess_ai.model import PolicyValueNet, load_checkpoint
 from chess_ai.training import Trainer, TrainingConfig, policy_accuracy, policy_value_loss
+from chess_ai.training.trainer import TrainingError
 
 
 def _example(game_id: str, action: int, value: float) -> TrainingExample:
@@ -26,6 +28,52 @@ def _example(game_id: str, action: int, value: float) -> TrainingExample:
         value,
         {"game_id": game_id},
     )
+
+
+@pytest.mark.parametrize("freeze", [False, True])
+def test_batch_norm_statistics_mode_preserves_training_and_resume(tmp_path, freeze):
+    torch.manual_seed(461)
+    model = PolicyValueNet(channels=4, residual_blocks=0)
+    original_buffers = {k: b.clone() for k, b in model.named_buffers()}
+    original_affine = model.input_block[1].bias.detach().clone()
+    config = TrainingConfig(
+        checkpoint_dir=tmp_path / "checkpoints",
+        metrics_path=tmp_path / "metrics.jsonl",
+        batch_size=2,
+        epochs=1,
+        learning_rate=1e-3,
+        seed=461,
+        device="cpu",
+        freeze_batch_norm_statistics=freeze,
+    )
+    rows = [_example(f"g{i}", i + 1, 1.0 if i % 2 else -1.0) for i in range(6)]
+    trainer = Trainer(model, config)
+    trainer.fit(rows)
+    final = load_checkpoint(config.checkpoint_dir / "last.pt")
+    for key, buffer in final.model.named_buffers():
+        if freeze:
+            assert torch.equal(buffer, original_buffers[key])
+        elif key.endswith("num_batches_tracked"):
+            assert buffer.item() > original_buffers[key].item()
+    assert not torch.equal(final.model.input_block[1].bias, original_affine)
+    assert final.metadata["training_config"].get("freeze_batch_norm_statistics", False) is freeze
+    resumed = replace(config, epochs=2, resume_from=config.checkpoint_dir / "last.pt")
+    assert [
+        m.epoch for m in Trainer(PolicyValueNet(channels=4, residual_blocks=0), resumed).fit(rows)
+    ] == [2]
+    if freeze:
+        for key, buffer in load_checkpoint(config.checkpoint_dir / "last.pt").model.named_buffers():
+            assert torch.equal(buffer, original_buffers[key])
+    with pytest.raises(TrainingError, match="BatchNorm statistics behavior"):
+        Trainer(
+            PolicyValueNet(channels=4, residual_blocks=0),
+            replace(resumed, epochs=3, freeze_batch_norm_statistics=not freeze),
+        ).fit(rows)
+
+
+def test_batch_norm_statistics_setting_requires_boolean():
+    with pytest.raises(ValueError, match="freeze_batch_norm_statistics"):
+        TrainingConfig(freeze_batch_norm_statistics="true")  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
