@@ -27,11 +27,18 @@ explicit general/endgame/mating exposure shares; champion and holdouts stay prot
 
 ## Phase 1 boundary
 
+The [independent search pilots](search_experiments/README.md) leave production PUCT unchanged.
+The experimental agent selects one of baseline, exact-input neural cache, batched leaves,
+bounded tactical verification, or history-safe subtree reuse. Separate fresh-game collection
+feeds explicit Stockfish failure labels and split-preserving replay into an isolated candidate.
+It does not import evaluation games, modify the full-GM corpus, specialize the value head, or
+automatically promote checkpoints.
+
 This repository is a supervised-bootstrap vertical slice. It has a reliable chess environment,
 classical agents, a compact policy-value network, local data/training tools, a focused neural-play
 GUI, controlled evaluation, and a small deterministic PUCT inference agent. It deliberately does
 **not** claim to be AlphaZero: search does not yet generate self-play training targets, inference is
-not batched, and there is no reinforcement-learning loop or automation of external chess GUIs or
+not batched in production (only in the opt-in search pilot), and there is no reinforcement-learning loop or automation of external chess GUIs or
 websites. Separately executed local Stockfish UCI teacher analysis is an explicitly authorized layer.
 
 ## Dependency flow

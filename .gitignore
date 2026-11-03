@@ -24,6 +24,11 @@ data/curricula/
 data/opening_books/
 data/experiments/**/relabel/
 data/experiments/**/teacher_cache/
+
+# Resumable local experiment catalogs, tensors, caches, and reports.
+data/experiments/
+data/diagnostics/
+data/search_experiments/
 checkpoints/*
 !checkpoints/.gitkeep
 

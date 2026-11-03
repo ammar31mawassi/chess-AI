@@ -59,4 +59,3 @@ if ($Build) {
     "https://github.com/official-stockfish/Stockfish/tree/$commit" | Set-Content -LiteralPath (Join-Path $buildDir 'SOURCE.txt') -Encoding utf8NoBOM
     Write-Host "Built immutable executable: $builtExe"
 }
-

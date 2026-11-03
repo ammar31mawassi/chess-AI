@@ -46,4 +46,3 @@ and [official Published-Data API documentation](https://www.chess.com/news/view/
 The [personal-game Stockfish workflow](personal_stockfish_training.md) performs a separate explicit
 import, validates/freeze-snapshots the local PGNs, and labels every unique position. Downloaded moves
 are position sources; Stockfish move preferences and evaluations supply the training targets.
-

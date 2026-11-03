@@ -1,5 +1,10 @@
 # Training guide (Windows PowerShell)
 
+For separately testable search/tactics experiments and fresh failure-driven Stockfish training,
+see [the experiment README](search_experiments/README.md). Independent outputs preserve the
+champion, current full-corpus job, and holdouts. Search arms need no retraining; the failure-data
+workflow creates a separate replay candidate.
+
 For targeted endgame diagnosis, a bounded Stockfish curriculum, Syzygy/GM research,
 and exact expensive-job commands, use [the endgame pilot runbook](endgame_pilot.md).
 Its reserved candidate starts from the frozen epoch-60 champion and never promotes
