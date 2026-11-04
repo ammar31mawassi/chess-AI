@@ -1,5 +1,10 @@
 # Training guide (Windows PowerShell)
 
+On 2026-11-04 the user promoted full-corpus scratch epoch 99; see
+[the promotion record](full_gm_rebuild.md#scratch-promotion-2026-11-04).
+Older signed experiments retain their epoch-60 baseline. Their registry guards intentionally
+reject further staged work after this promotion; reserve a new run for new champion-based jobs.
+
 For separately testable search/tactics experiments and fresh failure-driven Stockfish training,
 see [the experiment README](search_experiments/README.md). Independent outputs preserve the
 champion, current full-corpus job, and holdouts. Search arms need no retraining; the failure-data

@@ -43,8 +43,10 @@ record, discovery prefers the newest successful `checkpoints/human_sessions/**/b
 stays blank for you to browse. `--device auto` uses CUDA when the installed PyTorch build can access
 it and otherwise uses CPU.
 
-The promoted Stockfish rebuild champion is a frozen copy of epoch 60, with 32 PUCT simulations,
-`c_puct=1.5`, and no opening book. Launch it with `python -m chess_ai gui --device cuda`.
+The champion promoted on 2026-11-04 is the full-corpus scratch model, frozen at epoch 99 in
+`checkpoints/champions/full_gm_rebuild_v1_20261031_01_scratch_epoch_0099.pt`, with 32 PUCT
+simulations, `c_puct=1.5`, and no opening book. The previous epoch-60 checkpoint and full
+registry record remain archived. Launch the current champion with `python -m chess_ai gui --device cuda`.
 An explicit `--search-simulations 0` overrides search with greedy play. An explicit `--checkpoint`
 bypasses champion discovery and defaults to greedy play unless a simulation count is supplied.
 New training outputs do not replace the registered champion on the next launch.

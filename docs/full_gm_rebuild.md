@@ -256,7 +256,97 @@ sibling lock. Keep the SQLite catalog and completed shards. For another experime
 use `scripts/full_gm_rebuild.py --run-id YOUR_NEW_ID --stage reserve`; output IDs and
 training paths are never reused automatically.
 
-## Setup verification
+## Scratch promotion (2026-11-04)
+
+After reviewing the matched development and fresh confirmation results, the user explicitly
+authorized replacing the registered champion with scratch epoch 99. Production search remains
+PUCT32, `c_puct=1.5`, and no book. No training or evaluation job was started for promotion.
+
+The frozen promoted copy is
+`checkpoints/champions/full_gm_rebuild_v1_20261031_01_scratch_epoch_0099.pt`, SHA256
+`8faa6ba938b6d467001a11c7e1e2e3b4a0cba8bdeebc06878ca805d5b6cd478a`.
+`checkpoints/champion.json` now selects this copy. Both the source
+`checkpoints/full_gm_rebuild_v1_20261031_01_scratch/best.pt` and previous champion checkpoint
+remain unchanged. The previous complete registry is archived byte-for-byte at
+`checkpoints/champions/stockfish_rebuild_eval_v2_20261011_01_epoch_0060.champion.json`.
+
+| Matched round | D1 scratch / previous | D2 scratch / previous | Combined gain |
+|---|---:|---:|---:|
+| Development seed 4112027 | 57.5 / 55 | 30 / 20.5 | +12 |
+| Fresh confirmation seed 4112028 | 55.5 / 53.5 | 25.5 / 20.5 | +7 |
+
+Each row used 32 shared random openings, both colors, and 64 games per opponent per model.
+All games finished naturally. Across both rounds scratch scored 168.5/256 versus 149.5/256,
+a +19-point descriptive gain. The fresh-round approximate opening-cluster bootstrap 95%
+interval for total gain was [-2, +16], so it was not statistically conclusive alone.
+The user authorized a practical promotion using repeated descriptive gains, stronger endgame
+development results, and the earlier 2-0 direct standard-start development result. D2 remains
+a weakness: scratch scored 55.5/128 (43.4%) against it across both rounds.
+
+Hash-bound evidence and the explicit authorization are recorded in
+`data/experiments/full_gm_rebuild_v1_20261031_01/promotion_scratch_20261104.json` and the new
+registry. Promotion uses the existing version-1 champion format and atomic registry replacement.
+Default GUI discovery and its effective PUCT settings were verified without launching the GUI.
+Existing GUI instances retain their loaded model; new launches discover the promoted copy.
+
+Historical signed experiment and confirmation runners retain their old registry binding and
+may reject reuse after promotion. Their outputs and holdouts remain preserved. Reserve new
+run IDs for new champion-based experiments instead of editing historical signatures.
+
+## Fine-tune continuation from epoch 8 (2026-11-04)
+
+The first fine-tune reached its 8-epoch cap with improving validation loss, from
+2.792583 at epoch 1 to 2.781787 at epoch 8. The last epoch's learning rate was
+3.806e-7. A separate continuation tests whether a fresh low-rate schedule can
+improve this candidate. It is not a continuation of the old optimizer/scheduler.
+
+The reserved config is
+[`configs/full_gm_finetune_continue_v1_20261104_01.yaml`](../configs/full_gm_finetune_continue_v1_20261104_01.yaml).
+It copies the ready fine-tune config, preserving the complete 770,334-position
+corpus (680,747 train; 89,587 validation), explicit splits, seed 31102039,
+65/30/5 sampling, cp/600 semantics, and frozen BatchNorm statistics. Changes are
+24 additional epochs maximum, LR 3e-6 with a fresh 24-epoch cosine schedule,
+patience 5, every-epoch checkpoint retention, and independent checkpoint/metrics
+paths. Baseline eligibility keeps the source weights as epoch zero until beaten
+on the configured validation metric; the champion is not promoted automatically.
+
+The local `data/experiments/full_gm_finetune_continue_v1_20261104_01/experiment.json`
+records source/config/corpus hashes and zero training updates at reservation.
+The source is the original fine-tune epoch 8, SHA256
+`e5127226091a3d6431b5b52698d29b36e6118cd8783adc65243af5b17d479906`.
+Original configs/checkpoints and scratch/champion candidates are preserved.
+
+Start this separate training stage (its epochs are numbered 1 through 24):
+
+```powershell
+Set-Location 'C:\Users\ammar\OneDrive\Desktop\chess-AI'
+$py = '.\.venv\Scripts\python.exe'
+& $py -m chess_ai train `
+  --config configs/full_gm_finetune_continue_v1_20261104_01.yaml `
+  --init-checkpoint checkpoints/full_gm_rebuild_v1_20261031_01_finetune/best.pt `
+  --device cuda
+if ($LASTEXITCODE -ne 0) { throw 'Fine-tune continuation stopped' }
+```
+
+Only after interruption, resume the new stage's last completed epoch:
+
+```powershell
+Set-Location 'C:\Users\ammar\OneDrive\Desktop\chess-AI'
+$py = '.\.venv\Scripts\python.exe'
+& $py -m chess_ai train `
+  --config configs/full_gm_finetune_continue_v1_20261104_01.yaml `
+  --resume checkpoints/full_gm_finetune_continue_v1_20261104_01/last.pt `
+  --device cuda
+if ($LASTEXITCODE -ne 0) { throw 'Fine-tune continuation resume stopped' }
+```
+
+When complete, evaluate its `best.pt` through the same synthetic/GM development
+suites, with new output directories and unchanged production PUCT32. Compare
+against the original fine-tune, scratch, and champion; improved loss alone does
+not demonstrate better gameplay. Do not change original signed corpus configs
+or rerun `full_gm_rebuild.py --stage train --arm finetune` for this new stage.
+
+## Original setup verification
 
 Ruff formatting/checks and mypy passed, including the new/extended scripts. Full
 pytest with the pinned local Stockfish smoke passed **354 tests with one expected

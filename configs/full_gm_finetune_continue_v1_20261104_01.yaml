@@ -1,0 +1,39 @@
+seed: 31102039
+device: cuda
+model:
+  channels: 32
+  residual_blocks: 2
+  input_planes: 18
+  action_size: 4208
+training:
+  dataset_path: data\experiments\full_gm_rebuild_v1_20261031_01\dataset.json
+  checkpoint_dir: checkpoints\full_gm_finetune_continue_v1_20261104_01
+  metrics_path: data\metrics\full_gm_finetune_continue_v1_20261104_01.jsonl
+  batch_size: 128
+  epochs: 24
+  learning_rate: 3.0e-06
+  weight_decay: 1.0e-05
+  gradient_clip: 1.0
+  scheduler: true
+  legal_policy_mask: true
+  policy_loss_weight: 1.0
+  value_loss_weight: 1.0
+  selection_metric: validation_loss
+  checkpoint_every: 1
+  early_stopping_patience: 5
+  early_stopping_min_delta: 0.0001
+  baseline_eligible: true
+  game_balanced_sampling: false
+  use_dataset_split: true
+  value_target_spec:
+    kind: stockfish_cp_tanh_v1
+    perspective: side_to_move
+    scale_cp: 600.0
+  validation_source_key: origin
+  log_every: 200
+  freeze_batch_norm_statistics: true
+  source_sampling_multipliers:
+    general: 1.053436797033522e-06
+    endgame: 4.7904956566172715e-06
+    basic_mate: 4.5662100456621006e-05
+  sampling_source_key: sampling_bucket
