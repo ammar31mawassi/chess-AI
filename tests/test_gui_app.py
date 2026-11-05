@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 import os
+import tkinter as tk
 from pathlib import Path
 from queue import Queue
+from tkinter import ttk
 from typing import Any
 
 import chess
 import pytest
 
 from chess_ai.gui.app import (
-    PIECE_SYMBOLS,
     NeuralChessApp,
     discover_default_checkpoint,
     grid_to_square,
     square_to_grid,
 )
+from chess_ai.gui.pieces import ASSET_DIRECTORY
 from chess_ai.gui.session_training import SessionTrainingPlan, SessionTrainingResult
 
 
@@ -101,11 +103,68 @@ def test_default_checkpoint_uses_newest_other_best_then_last(tmp_path: Path) -> 
     assert discover_default_checkpoint(tmp_path) == latest
 
 
-def test_piece_symbols_cover_standard_chess() -> None:
-    assert len(PIECE_SYMBOLS) == 12
-    for color in chess.COLORS:
-        for piece_type in chess.PIECE_TYPES:
-            assert PIECE_SYMBOLS[(color, piece_type)]
+def test_bundled_pieces_have_transparent_margins_and_solid_bodies() -> None:
+    from PIL import Image
+
+    for color in "wb":
+        for kind in "KQRBNP":
+            with Image.open(ASSET_DIRECTORY / f"{color}{kind}.png") as image:
+                assert image.size == (256, 256)
+                assert image.mode == "RGBA"
+                assert image.getpixel((0, 0))[3] == 0
+                # A font outline would leave the center of the body transparent.
+                assert image.getpixel((128, 160))[3] == 255
+
+
+def test_artwork_board_resizes_and_flip_preserves_click_targets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("Tk display is unavailable")
+    monkeypatch.setattr("chess_ai.gui.app.resolve_gui_defaults", lambda *args: (None, 0, 1.5))
+    monkeypatch.setattr(
+        "chess_ai.gui.app.create_session_training_plan", lambda **kwargs: _training_plan(tmp_path)
+    )
+    monkeypatch.setattr(NeuralChessApp, "_start_discovered_checkpoint", lambda self: None)
+    try:
+        app = NeuralChessApp(root)
+        for geometry, flipped in (("1180x820", False), ("900x640", True)):
+            root.geometry(geometry)
+            app._flipped = flipped
+            root.update()
+            app.render_board()
+            assert sum(app.canvas.type(item) == "image" for item in app.canvas.find_all()) == 32
+            for square in chess.SQUARES:
+                row, column = square_to_grid(square, flipped=flipped)
+                size = app._board_size / 8
+                x = app._board_left + (column + 0.5) * size
+                y = app._board_top + (row + 0.5) * size
+                assert app._canvas_square(x, y) == square
+            assert (
+                app.status_label.winfo_rooty() + app.status_label.winfo_height()
+                <= root.winfo_rooty() + root.winfo_height()
+            )
+            assert app.training_check.winfo_ismapped()
+            assert (
+                app.training_check.winfo_rooty() + app.training_check.winfo_height()
+                <= root.winfo_rooty() + root.winfo_height()
+            )
+            assert "No moves yet" in app.history_text.get("1.0", tk.END)
+            notebook = app.new_button.master.master
+            assert isinstance(notebook, ttk.Notebook)
+            for tab, control in ((1, app.device_combo), (2, app.done_button), (0, app.new_button)):
+                notebook.select(tab)
+                root.update()
+                assert control.winfo_ismapped()
+                assert (
+                    control.winfo_rooty() + control.winfo_height() <= app.status_label.winfo_rooty()
+                )
+        assert app.top_player_var.get() == "You · White"
+    finally:
+        root.destroy()
 
 
 def test_finished_game_can_retry_after_a_pgn_save_failure(

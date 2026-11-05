@@ -24,6 +24,7 @@ from chess_ai.agents.neural_agent import NeuralAgent
 from chess_ai.agents.neural_mcts_agent import NeuralMCTSAgent
 from chess_ai.agents.opening_book_agent import OpeningBookAgent
 from chess_ai.gui.controller import HumanNeuralGame
+from chess_ai.gui.pieces import PieceImages
 from chess_ai.gui.session_training import (
     SessionTrainingPlan,
     SessionTrainingResult,
@@ -36,27 +37,17 @@ from chess_ai.storage.champion import load_gameplay_champion
 DEFAULT_DATASET_PATH = Path("data/datasets/human_gui.pt")
 DEFAULT_PGN_DIR = Path("data/games/human_gui")
 
-PIECE_SYMBOLS: dict[tuple[chess.Color, chess.PieceType], str] = {
-    (chess.WHITE, chess.KING): "♔",
-    (chess.WHITE, chess.QUEEN): "♕",
-    (chess.WHITE, chess.ROOK): "♖",
-    (chess.WHITE, chess.BISHOP): "♗",
-    (chess.WHITE, chess.KNIGHT): "♘",
-    (chess.WHITE, chess.PAWN): "♙",
-    (chess.BLACK, chess.KING): "♚",
-    (chess.BLACK, chess.QUEEN): "♛",
-    (chess.BLACK, chess.ROOK): "♜",
-    (chess.BLACK, chess.BISHOP): "♝",
-    (chess.BLACK, chess.KNIGHT): "♞",
-    (chess.BLACK, chess.PAWN): "♟",
-}
-
-LIGHT_SQUARE = "#E9DDC7"
-DARK_SQUARE = "#7A5C52"
-SELECTED_SQUARE = "#F4D35E"
-LAST_MOVE_SQUARE = "#DDB967"
-CHECK_SQUARE = "#DF6C63"
-LEGAL_MARKER = "#187B73"
+BACKGROUND = "#191E1C"
+SURFACE = "#242B27"
+TEXT = "#F0F1E9"
+MUTED = "#BAC6BD"
+ACCENT = "#B8D69B"
+LIGHT_SQUARE = "#E8E9D7"
+DARK_SQUARE = "#77917A"
+SELECTED_SQUARE = "#D7D77C"
+LAST_MOVE_SQUARE = "#B8C58B"
+CHECK_SQUARE = "#DA8274"
+LEGAL_MARKER = "#304C3B"
 
 
 def grid_to_square(row: int, column: int, *, flipped: bool) -> chess.Square:
@@ -192,8 +183,9 @@ class NeuralChessApp:
     ) -> None:
         self.root = root
         self.root.title("Neural Chess Workbench")
-        self.root.geometry("1080x720")
-        self.root.minsize(880, 600)
+        self.root.geometry("1180x820")
+        self.root.minsize(900, 640)
+        self.root.configure(background=BACKGROUND)
 
         discovered, simulations, exploration = resolve_gui_defaults(
             checkpoint, search_simulations, c_puct
@@ -244,6 +236,7 @@ class NeuralChessApp:
         self._refresh_session_label()
 
         self._configure_style()
+        self._piece_images = PieceImages(root)
         self._build_layout()
         self._bind_shortcuts()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
@@ -253,145 +246,274 @@ class NeuralChessApp:
 
     def _configure_style(self) -> None:
         style = ttk.Style(self.root)
-        if "vista" in style.theme_names():
-            style.theme_use("vista")
-        style.configure(".", font=("Segoe UI", 10))
-        style.configure("Title.TLabel", font=("Segoe UI Semibold", 16))
-        style.configure("Status.TLabel", font=("Segoe UI Semibold", 11))
-        style.configure("Train.TButton", font=("Segoe UI Semibold", 10), padding=(10, 8))
+        style.theme_use("clam")
+        style.configure(".", font=("Segoe UI", 10), background=BACKGROUND, foreground=TEXT)
+        style.configure("TFrame", background=BACKGROUND)
+        style.configure("TLabel", background=BACKGROUND, foreground=TEXT)
+        style.configure("Title.TLabel", font=("Segoe UI Semibold", 22))
+        style.configure("Section.TLabel", font=("Segoe UI Semibold", 12))
+        style.configure("Muted.TLabel", foreground=MUTED)
+        style.configure("Status.TLabel", font=("Segoe UI Semibold", 12), foreground=ACCENT)
+        style.configure(
+            "TButton",
+            padding=(12, 9),
+            background=SURFACE,
+            bordercolor="#67766C",
+            lightcolor=SURFACE,
+            darkcolor=SURFACE,
+            borderwidth=1,
+        )
+        style.map(
+            "TButton",
+            background=[("active", "#36443A")],
+            foreground=[("disabled", "#89958D")],
+            bordercolor=[("focus", ACCENT)],
+        )
+        style.configure(
+            "Primary.TButton",
+            background=ACCENT,
+            foreground=BACKGROUND,
+            font=("Segoe UI Semibold", 10),
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("disabled", SURFACE), ("active", "#C9E4B0")],
+            foreground=[("disabled", "#89958D"), ("!disabled", BACKGROUND)],
+        )
+        style.configure("Train.TButton", padding=(10, 10), font=("Segoe UI Semibold", 10))
+        style.configure(
+            "TEntry", fieldbackground=SURFACE, insertcolor=TEXT, bordercolor="#78877C", padding=6
+        )
+        style.map("TEntry", foreground=[("disabled", MUTED)])
+        style.configure(
+            "TCombobox", fieldbackground=SURFACE, background=SURFACE, arrowcolor=TEXT, padding=5
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", SURFACE)],
+            foreground=[("disabled", "#89958D"), ("readonly", TEXT)],
+        )
+        style.configure("TCheckbutton", padding=(0, 6))
+        style.map(
+            "TCheckbutton",
+            background=[("active", BACKGROUND)],
+            foreground=[("disabled", "#89958D")],
+        )
+        style.configure(
+            "TNotebook",
+            borderwidth=0,
+            tabmargins=(0, 0, 0, 12),
+            lightcolor=BACKGROUND,
+            darkcolor=BACKGROUND,
+            bordercolor=BACKGROUND,
+        )
+        style.configure(
+            "TNotebook.Tab",
+            padding=(15, 10),
+            background=SURFACE,
+            lightcolor=BACKGROUND,
+            darkcolor=BACKGROUND,
+            bordercolor=BACKGROUND,
+        )
+        style.configure(
+            "Vertical.TScrollbar",
+            background="#46564A",
+            troughcolor=SURFACE,
+            bordercolor=SURFACE,
+            lightcolor="#46564A",
+            darkcolor="#46564A",
+            arrowcolor=TEXT,
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", BACKGROUND)],
+            foreground=[("selected", ACCENT)],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", SURFACE)
+        self.root.option_add("*TCombobox*Listbox.foreground", TEXT)
 
     def _build_layout(self) -> None:
-        container = ttk.Frame(self.root, padding=12)
+        container = ttk.Frame(self.root, padding=(24, 18))
         container.pack(fill=tk.BOTH, expand=True)
         container.columnconfigure(0, weight=1)
-        container.columnconfigure(1, weight=0)
-        container.rowconfigure(0, weight=1)
+        container.columnconfigure(1, minsize=338)
+        container.rowconfigure(1, weight=1)
+
+        header = ttk.Frame(container)
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 18))
+        ttk.Label(header, text="Neural Chess", style="Title.TLabel").pack(side=tk.LEFT)
+        ttk.Label(header, text="LOCAL PLAY  /  YOUR NEURAL OPPONENT", style="Muted.TLabel").pack(
+            side=tk.RIGHT
+        )
 
         board_frame = ttk.Frame(container)
-        board_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
-        board_frame.rowconfigure(0, weight=1)
+        board_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 24))
+        board_frame.rowconfigure(1, weight=1)
         board_frame.columnconfigure(0, weight=1)
-        self.canvas = tk.Canvas(board_frame, highlightthickness=0, background="#202020")
-        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.top_player_var = tk.StringVar(value="Neural AI · Black")
+        self.bottom_player_var = tk.StringVar(value="You · White")
+        ttk.Label(board_frame, textvariable=self.top_player_var, style="Section.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 8)
+        )
+        self.canvas = tk.Canvas(
+            board_frame, highlightthickness=0, background=BACKGROUND, cursor="hand2"
+        )
+        self.canvas.grid(row=1, column=0, sticky="nsew")
         self.canvas.bind("<Configure>", self._on_canvas_resize)
         self.canvas.bind("<Button-1>", self._on_board_click)
+        ttk.Label(board_frame, textvariable=self.bottom_player_var, style="Section.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(8, 0)
+        )
+        ttk.Label(
+            board_frame,
+            text="Select a piece, then a legal destination.  Esc clears selection.",
+            style="Muted.TLabel",
+        ).grid(row=3, column=0, sticky="w", pady=(10, 0))
 
-        panel = ttk.Frame(container, width=330)
-        panel.grid(row=0, column=1, sticky="ns")
+        panel = ttk.Frame(container, width=338)
+        panel.grid(row=1, column=1, sticky="nsew")
         panel.grid_propagate(False)
         panel.columnconfigure(0, weight=1)
-
-        ttk.Label(panel, text="Neural Chess Workbench", style="Title.TLabel").grid(
+        panel.rowconfigure(1, weight=1)
+        ttk.Label(panel, text="YOUR WORKBENCH", style="Muted.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, 10)
         )
+        notebook = ttk.Notebook(panel)
+        notebook.grid(row=1, column=0, sticky="nsew")
+        play = ttk.Frame(notebook, padding=(2, 0))
+        setup = ttk.Frame(notebook, padding=(2, 0))
+        session = ttk.Frame(notebook, padding=(2, 0))
+        for frame, title in ((play, "Play"), (setup, "Setup"), (session, "Training")):
+            notebook.add(frame, text=title)
+            frame.columnconfigure(0, weight=1)
 
-        setup = ttk.LabelFrame(panel, text="Game setup", padding=10)
-        setup.grid(row=1, column=0, sticky="ew")
-        setup.columnconfigure(0, weight=1)
+        self.new_button = ttk.Button(
+            play, text="New Game", style="Primary.TButton", command=self.new_game
+        )
+        self.new_button.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        controls = ttk.Frame(play)
+        controls.grid(row=1, column=0, sticky="ew")
+        controls.columnconfigure((0, 1), weight=1)
+        self.undo_button = ttk.Button(controls, text="Undo Turn", command=self.undo_turn)
+        self.undo_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.flip_button = ttk.Button(controls, text="Flip Board", command=self.flip_board)
+        self.flip_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self.resign_button = ttk.Button(play, text="Resign", command=self.resign)
+        self.resign_button.grid(row=2, column=0, sticky="ew", pady=(8, 20))
+        ttk.Label(play, text="Move history", style="Section.TLabel").grid(
+            row=3, column=0, sticky="w", pady=(0, 8)
+        )
+        history = ttk.Frame(play)
+        history.grid(row=4, column=0, sticky="nsew")
+        play.rowconfigure(4, weight=1)
+        self.history_text = tk.Text(
+            history,
+            height=6,
+            width=28,
+            state=tk.DISABLED,
+            wrap=tk.NONE,
+            font=("Consolas", 12),
+            relief=tk.FLAT,
+            borderwidth=0,
+            background=SURFACE,
+            foreground=TEXT,
+            padx=12,
+            pady=12,
+            selectbackground="#49684E",
+            selectforeground=TEXT,
+            highlightthickness=1,
+            highlightbackground=SURFACE,
+            highlightcolor=ACCENT,
+            spacing1=4,
+            spacing3=4,
+            cursor="arrow",
+        )
+        self.history_text.tag_configure("latest", background="#394B3C", foreground=TEXT)
+        scrollbar = ttk.Scrollbar(history, orient=tk.VERTICAL, command=self.history_text.yview)
+        self.history_text.configure(yscrollcommand=scrollbar.set)
+        self.history_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        ttk.Label(play, text="Ctrl+N  New game     Ctrl+Z  Undo turn", style="Muted.TLabel").grid(
+            row=5, column=0, sticky="w", pady=(10, 0)
+        )
+
+        ttk.Label(setup, text="Game setup", style="Section.TLabel").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 14)
+        )
+        ttk.Label(setup, text="Checkpoint").grid(row=1, column=0, sticky="w", pady=(0, 4))
         self.checkpoint_entry = ttk.Entry(setup, textvariable=self.checkpoint_var)
-        self.checkpoint_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        self.browse_button = ttk.Button(setup, text="Browse...", command=self.browse_checkpoint)
-        self.browse_button.grid(row=0, column=1)
-
-        options = ttk.Frame(setup)
-        options.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-        options.columnconfigure(1, weight=1)
-        ttk.Label(options, text="Play as").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        self.checkpoint_entry.grid(row=2, column=0, sticky="ew", padx=(0, 6))
+        self.browse_button = ttk.Button(setup, text="Browse…", command=self.browse_checkpoint)
+        self.browse_button.grid(row=2, column=1)
+        ttk.Label(setup, text="Play as").grid(row=3, column=0, sticky="w", pady=(16, 4))
         self.color_combo = ttk.Combobox(
-            options,
-            textvariable=self.human_color_var,
-            values=("white", "black"),
-            state="readonly",
-            width=10,
+            setup, textvariable=self.human_color_var, values=("white", "black"), state="readonly"
         )
-        self.color_combo.grid(row=0, column=1, sticky="ew")
-        ttk.Label(options, text="Device").grid(
-            row=1, column=0, sticky="w", padx=(0, 8), pady=(6, 0)
-        )
+        self.color_combo.grid(row=4, column=0, columnspan=2, sticky="ew")
+        ttk.Label(setup, text="Device").grid(row=5, column=0, sticky="w", pady=(16, 4))
         self.device_combo = ttk.Combobox(
-            options,
-            textvariable=self.device_var,
-            values=("auto", "cpu", "cuda"),
-            state="readonly",
-            width=10,
+            setup, textvariable=self.device_var, values=("auto", "cpu", "cuda"), state="readonly"
         )
-        self.device_combo.grid(row=1, column=1, sticky="ew", pady=(6, 0))
-
-        self.training_check = ttk.Checkbutton(
-            setup,
-            text="Learn from this game (confirm at end)",
-            variable=self.training_var,
-        )
-        self.training_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=(9, 0))
-        ttk.Label(setup, text="Training dataset").grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(8, 2)
-        )
-        self.dataset_entry = ttk.Entry(setup, textvariable=self.dataset_var)
-        self.dataset_entry.grid(row=4, column=0, columnspan=2, sticky="ew")
+        self.device_combo.grid(row=6, column=0, columnspan=2, sticky="ew")
         ttk.Label(
             setup,
-            text="Setup changes apply to the next game.",
-            foreground="#555555",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(5, 0))
+            text="Changes apply when you start a new game.",
+            style="Muted.TLabel",
+            wraplength=310,
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(16, 0))
 
-        controls = ttk.LabelFrame(panel, text="Game controls", padding=10)
-        controls.grid(row=2, column=0, sticky="ew", pady=(10, 0))
-        controls.columnconfigure((0, 1), weight=1)
-        self.new_button = ttk.Button(controls, text="New Game", command=self.new_game)
-        self.new_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self.undo_button = ttk.Button(controls, text="Undo Turn", command=self.undo_turn)
-        self.undo_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
-        self.resign_button = ttk.Button(controls, text="Resign", command=self.resign)
-        self.resign_button.grid(row=1, column=0, sticky="ew", padx=(0, 4), pady=(8, 0))
-        self.flip_button = ttk.Button(controls, text="Flip Board", command=self.flip_board)
-        self.flip_button.grid(row=1, column=1, sticky="ew", padx=(4, 0), pady=(8, 0))
-
-        session = ttk.LabelFrame(panel, text="Automatic training session", padding=10)
-        session.grid(row=3, column=0, sticky="ew", pady=(10, 0))
-        session.columnconfigure(0, weight=1)
+        ttk.Label(session, text="Learn from your games", style="Section.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 10)
+        )
+        ttk.Label(
+            session,
+            text="Only completed games you confirm are collected.",
+            wraplength=310,
+            style="Muted.TLabel",
+        ).grid(row=2, column=0, sticky="w", pady=(4, 16))
+        ttk.Label(session, text="Training dataset").grid(row=3, column=0, sticky="w", pady=(0, 4))
+        self.dataset_entry = ttk.Entry(session, textvariable=self.dataset_var)
+        self.dataset_entry.grid(row=4, column=0, sticky="ew")
+        ttk.Label(session, text="Automatic training session", style="Section.TLabel").grid(
+            row=5, column=0, sticky="w", pady=(22, 8)
+        )
         ttk.Label(
             session,
             textvariable=self.session_var,
-            wraplength=285,
+            wraplength=310,
             justify=tk.LEFT,
-        ).grid(row=0, column=0, sticky="ew")
+            style="Muted.TLabel",
+        ).grid(row=6, column=0, sticky="ew")
         self.done_button = ttk.Button(
             session,
             text="I'm Done — Train AI",
             style="Train.TButton",
             command=self.finish_session_and_train,
         )
-        self.done_button.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        self.done_button.grid(row=7, column=0, sticky="ew", pady=(16, 0))
+        ttk.Label(
+            session,
+            text="Finish or resign your game before training.",
+            style="Muted.TLabel",
+            wraplength=310,
+        ).grid(row=8, column=0, sticky="w", pady=(8, 0))
 
-        status = ttk.LabelFrame(panel, text="Status", padding=10)
-        status.grid(row=4, column=0, sticky="ew", pady=(10, 0))
+        status = ttk.Frame(panel, padding=(0, 14, 0, 0))
+        status.grid(row=2, column=0, sticky="ew")
+        ttk.Label(status, text="GAME STATUS", style="Muted.TLabel").pack(anchor=tk.W, pady=(0, 5))
         self.status_label = ttk.Label(
             status,
             textvariable=self.status_var,
             style="Status.TLabel",
-            wraplength=285,
+            wraplength=330,
             justify=tk.LEFT,
         )
         self.status_label.pack(fill=tk.X)
-
-        history = ttk.LabelFrame(panel, text="Move history", padding=8)
-        history.grid(row=5, column=0, sticky="nsew", pady=(10, 0))
-        panel.rowconfigure(5, weight=1)
-        self.history_text = tk.Text(
-            history,
-            height=10,
-            width=36,
-            state=tk.DISABLED,
-            wrap=tk.WORD,
-            font=("Consolas", 10),
-            relief=tk.FLAT,
-            borderwidth=0,
+        self.training_check = ttk.Checkbutton(
+            status, text="Learn from this game (confirm at end)", variable=self.training_var
         )
-        scrollbar = ttk.Scrollbar(history, orient=tk.VERTICAL, command=self.history_text.yview)
-        self.history_text.configure(yscrollcommand=scrollbar.set)
-        self.history_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
+        self.training_check.pack(anchor=tk.W, pady=(8, 0))
+        self._render_history()
         self._update_controls()
 
     def _bind_shortcuts(self) -> None:
@@ -1101,17 +1223,23 @@ class NeuralChessApp:
         self.history_text.configure(state=tk.NORMAL)
         self.history_text.delete("1.0", tk.END)
         controller = self.controller
-        if controller is not None:
+        self.history_text.insert("1.0", "     WHITE       BLACK\n")
+        if controller is not None and controller.move_history:
             replay = chess.Board()
             lines: list[str] = []
             for ply, move in enumerate(controller.move_history):
                 san = replay.san(move)
-                move_number = ply // 2 + 1
-                prefix = f"{move_number}." if ply % 2 == 0 else f"{move_number}..."
-                lines.append(f"{prefix} {san}")
+                if ply % 2 == 0:
+                    lines.append(f"{ply // 2 + 1:>3}  {san:<12}")
+                else:
+                    lines[-1] += san
                 replay.push(move)
-            self.history_text.insert("1.0", "\n".join(lines) or "No moves yet.")
+            self.history_text.insert(tk.END, "\n".join(lines))
+            last_line = len(lines) + 1
+            self.history_text.tag_add("latest", f"{last_line}.0", f"{last_line}.end")
             self.history_text.see(tk.END)
+        else:
+            self.history_text.insert(tk.END, "\nNo moves yet.\nYour game will appear here.")
         self.history_text.configure(state=tk.DISABLED)
 
     def render_board(self) -> None:
@@ -1128,6 +1256,25 @@ class NeuralChessApp:
 
         controller = self.controller
         board = controller.board if controller is not None else chess.Board()
+        human_color = (
+            controller.human_color
+            if controller is not None
+            else (chess.WHITE if self.human_color_var.get() == "white" else chess.BLACK)
+        )
+        for variable, player_color in (
+            (self.top_player_var, chess.WHITE if self._flipped else chess.BLACK),
+            (self.bottom_player_var, chess.BLACK if self._flipped else chess.WHITE),
+        ):
+            name = "You" if player_color == human_color else "Neural AI"
+            side = "White" if player_color == chess.WHITE else "Black"
+            turn = (
+                "  ·  to move"
+                if controller is not None
+                and not controller.game_over
+                and board.turn == player_color
+                else ""
+            )
+            variable.set(f"{name} · {side}{turn}")
         last_move = board.move_stack[-1] if board.move_stack else None
         check_square = board.king(board.turn) if board.is_check() else None
 
@@ -1146,15 +1293,17 @@ class NeuralChessApp:
                 if square == self._selected_square:
                     color = SELECTED_SQUARE
                 canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline=color)
+                if square == self._selected_square:
+                    canvas.create_rectangle(
+                        x0 + 2, y0 + 2, x1 - 2, y1 - 2, outline=LEGAL_MARKER, width=3
+                    )
 
                 piece = board.piece_at(square)
                 if piece is not None:
-                    canvas.create_text(
+                    canvas.create_image(
                         (x0 + x1) / 2,
                         (y0 + y1) / 2,
-                        text=PIECE_SYMBOLS[(piece.color, piece.piece_type)],
-                        font=("Segoe UI Symbol", max(16, int(square_size * 0.62))),
-                        fill="#111111",
+                        image=self._piece_images.get(piece, max(1, int(square_size * 0.88))),
                     )
                 if square in self._legal_destinations:
                     radius = square_size * (0.16 if piece is None else 0.38)
@@ -1176,6 +1325,7 @@ class NeuralChessApp:
                         text=rank_label,
                         anchor=tk.NW,
                         font=("Segoe UI Semibold", max(8, int(square_size * 0.12))),
+                        fill="#304C3B" if (row + column) % 2 == 0 else "#17291D",
                     )
                 if row == 7:
                     file_label = chess.square_name(square)[0]
@@ -1185,6 +1335,7 @@ class NeuralChessApp:
                         text=file_label,
                         anchor=tk.SE,
                         font=("Segoe UI Semibold", max(8, int(square_size * 0.12))),
+                        fill="#304C3B" if (row + column) % 2 == 0 else "#17291D",
                     )
 
     def close(self) -> None:

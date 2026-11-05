@@ -1,5 +1,25 @@
 # Architecture
 
+The [Lichess puzzle experiments](puzzle_training.md) explicitly select and validate 250,000
+puzzles, protect old inputs, journal compatible Stockfish value labels, and reserve separate
+full-corpus scratch and puzzle-only champion fine-tune arms. Solver moves supply policy labels;
+confirmation stays separate and no promotion occurs automatically.
+
+The [Lichess BOT adapter](lichess_bot.md) is an explicit user-authorized API-only exception for
+the dedicated `ZaatarTheCat` BOT account (2026-11-05). It is opt-in, uses the frozen registered
+champion, accepts casual standard human challenges one game at a time, and stores evaluation-only
+game journals. The separate bounded [terminal command](lichess_terminal.md) may challenge online
+bots with daily accounting and five simultaneous games by default, wait for one human rapid
+game, or play one built-in computer game
+at a selected level (1-8). It never controls a browser/GUI,
+trains, or promotes. The user launches live play.
+
+The concurrent BOT runner maintains independent game workers and move journals, serializes
+shared-model search with queue time charged to the caller's clock, reserves pending challenges
+against both the session target and daily allowance, and persists version-2 resumable batch
+summaries. It migrates version-1 bot batches without rewriting their old summaries. Human and
+built-in-computer modes, per-game version-1 journals and champion/search settings remain intact.
+
 The current registered champion is the full-GM-corpus scratch model at epoch 99, explicitly
 promoted on 2026-11-04 after matched development and fresh confirmation. Production inference
 remains PUCT32, `c_puct=1.5`, no book. The prior epoch-60 checkpoint and registry are archived;
@@ -44,8 +64,9 @@ This repository is a supervised-bootstrap vertical slice. It has a reliable ches
 classical agents, a compact policy-value network, local data/training tools, a focused neural-play
 GUI, controlled evaluation, and a small deterministic PUCT inference agent. It deliberately does
 **not** claim to be AlphaZero: search does not yet generate self-play training targets, inference is
-not batched in production (only in the opt-in search pilot), and there is no reinforcement-learning loop or automation of external chess GUIs or
-websites. Separately executed local Stockfish UCI teacher analysis is an explicitly authorized layer.
+not batched in production (only in the opt-in search pilot), and there is no reinforcement-learning
+loop or automation of external chess GUIs/browser playing interfaces. The dedicated opt-in Bot API
+service is the authorized online exception. Local Stockfish UCI teacher analysis is a separate layer.
 
 ## Dependency flow
 
@@ -227,6 +248,10 @@ Keeping these arrows mostly one-way makes it possible to learn and test one laye
   independently, and can collect only explicitly confirmed human moves in a separate cumulative
   dataset. Its session coordinator reserves collision-free training artifacts and starts the
   ordinary trainer in a background process.
+  Its presentation layer uses packaged Chessnut PNG artwork (Apache 2.0), with Pillow resizing
+  and a current-size Tk image cache. Original SVGs and license notices accompany the images;
+  no network access or SVG renderer is required to play. Play/setup/training tabs organize
+  controls while status remains visible. Board mapping and legality stay in their existing layers.
 - `arena/` plays agents through ordinary `chess.Board` copies, detects illegal agent output, switches
   colors, records move time, and reports an explicitly approximate Elo difference. Its paired audit
   compares candidate and champion against D1 on identical starts in both colors, can exclude every
