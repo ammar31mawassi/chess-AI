@@ -10,6 +10,22 @@ not guaranteed.
 
 ## Current capabilities
 
+The [250,000-puzzle workflow](docs/puzzle_training.md) prepares isolated full-corpus-plus-puzzles
+scratch training and puzzle-only champion fine-tuning, with validated solver roots, protected
+holdouts, resumable CPU value labels and user-run CUDA jobs. Neither arm auto-promotes.
+
+The dedicated [ZaatarTheCat](https://lichess.org/@/ZaatarTheCat) BOT account can use the opt-in
+[Lichess Bot API adapter](docs/lichess_bot.md), with the current champion, casual standard human
+challenges, a single active game, clock limits, and evaluation-only PGNs. The user launches the
+live process. API credentials are stored outside Git using Windows DPAPI or an environment variable.
+The [terminal batch command](docs/lichess_terminal.md) defaults to five concurrent bot opponents,
+supports an explicit concurrency override, and resumes unfinished batches with their saved results.
+
+The registered gameplay champion is the **full-corpus scratch model, epoch 99**, explicitly
+promoted on 2026-11-04 after matched development and fresh confirmation. Default GUI launches
+use PUCT 32, `c_puct=1.5`, and no opening book. The previous epoch-60 champion remains archived.
+See [the promotion record and results](docs/full_gm_rebuild.md#scratch-promotion-2026-11-04).
+
 Independent opt-in search and failure-training experiments are documented in
 [the experiment README](docs/search_experiments/README.md): profiling, exact-input neural caching,
 batched PUCT leaves, bounded tactical verification, history-safe subtree reuse, and fresh
@@ -46,7 +62,8 @@ checkpoint; the champion and production search defaults stay unchanged.
 The production agent includes deterministic PUCT, and offline teaching uses local Stockfish and
 resumable SQLite journals. Opt-in search experiments add batching and fresh correction collection.
 This phase does not include Dirichlet-noise self-play reinforcement learning, automatic model
-promotion, online play, or cloud services. The GUI is a local human-versus-neural workbench, not a
+promotion, or cloud hosting. Online play is opt-in through the dedicated BOT API account.
+The GUI is a local human-versus-neural workbench, not a
 general tournament frontend or a bridge to another chess application. The external application is
 **not automated**. The Chess Lv.100 is used only as a manually operated benchmark: a person copies
 the AI move into it and types its reply.

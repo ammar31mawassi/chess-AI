@@ -12,6 +12,11 @@ network connection are unnecessary. It is one single-window workbench: the chess
 surface, while a compact side panel groups model/game setup, current status, move history, data
 collection, and game actions.
 
+The sage-and-ivory board uses filled Chessnut artwork by Alexis Luengas, rather than
+font-dependent outline glyphs. Pillow resizes bundled transparent PNGs from their originals
+and retains only the current size in Tk's image cache. Installing the project installs Pillow;
+the GUI requires no asset downloads or SVG renderer at runtime.
+
 The UI reflects the same boundaries as the rest of the repository:
 
 - `python-chess` remains the only authority for legal moves, check, mate, draws, promotion, and
@@ -43,8 +48,10 @@ record, discovery prefers the newest successful `checkpoints/human_sessions/**/b
 stays blank for you to browse. `--device auto` uses CUDA when the installed PyTorch build can access
 it and otherwise uses CPU.
 
-The promoted Stockfish rebuild champion is a frozen copy of epoch 60, with 32 PUCT simulations,
-`c_puct=1.5`, and no opening book. Launch it with `python -m chess_ai gui --device cuda`.
+The champion promoted on 2026-11-04 is the full-corpus scratch model, frozen at epoch 99 in
+`checkpoints/champions/full_gm_rebuild_v1_20261031_01_scratch_epoch_0099.pt`, with 32 PUCT
+simulations, `c_puct=1.5`, and no opening book. The previous epoch-60 checkpoint and full
+registry record remain archived. Launch the current champion with `python -m chess_ai gui --device cuda`.
 An explicit `--search-simulations 0` overrides search with greedy play. An explicit `--checkpoint`
 bypasses champion discovery and defaults to greedy play unless a simulation count is supplied.
 New training outputs do not replace the registered champion on the next launch.
@@ -81,10 +88,14 @@ begins off.
 
 ## Board and workbench behavior
 
-The window is titled **Neural Chess Workbench**. Its right side contains **Game setup**, **Game
-controls**, **Automatic training session**, **Status**, and **Move history** sections. Setup keeps the
-**Checkpoint**, **Play as**, **Device**, **Learn from this game (confirm at end)**, and **Training dataset** choices visible;
-**Browse...** selects another checkpoint. Settings take effect when **New Game** starts. Controls also
+The window is titled **Neural Chess Workbench**. The board has player/color labels that follow
+orientation and show whose turn it is. Its right side has **Play**, **Setup**, and **Training** tabs,
+with **Game status** and the **Learn from this game (confirm at end)** opt-in always visible below
+them. **Play** contains game actions and paired White/Black
+move-history columns with the latest move row highlighted. **Setup** contains **Checkpoint**,
+**Play as**, and **Device**; **Browse…** selects another checkpoint. **Training** contains
+**Training dataset**, the session counters, and the training action.
+Settings take effect when **New Game** starts. Controls also
 provide **Undo Turn**, **Resign**, **Flip Board**, and **I'm Done — Train AI**. The last control ends
 the collection cycle, not the current chess game. It remains disabled until the current game is
 finished or resigned and its save/collection decision is complete, so it cannot discard the board.
@@ -246,3 +257,22 @@ and review the PGNs, validation metrics, and broader opponents before any manual
 - **Initialization refuses the output directory**: keep the source checkpoint where it is and set
   `training.checkpoint_dir` to a different candidate directory. If it reports an earlier candidate,
   also choose a new `training.metrics_path` or intentionally archive the old run first.
+
+## Artwork references and maintenance
+
+The design research compared [Cburnett's classic SVG set](https://commons.wikimedia.org/wiki/Template:SVG_chess_pieces)
+with [Chessnut](https://github.com/LexLuengas/chessnut-pieces). Chessnut was selected for its
+filled, balanced silhouettes and Apache 2.0 license. The workbench layout and board palette
+are project styling.
+No external chess GUI or website was opened or controlled during this work.
+
+Original SVGs, 256px transparent PNG derivatives, copyright, source revision, and the full
+Apache 2.0 license are shipped in `src/chess_ai/gui/assets/chessnut/`. They are also included
+in built wheels. To intentionally regenerate the assets from the pinned upstream revision:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install resvg-py==0.5.0
+.\.venv\Scripts\python.exe scripts/refresh_gui_pieces.py
+```
+
+This maintenance command needs internet access; ordinary GUI launches remain offline.

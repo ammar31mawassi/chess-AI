@@ -12,6 +12,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Self-Improving Chess AI contributors" }]
 dependencies = [
+  "Pillow>=10.4",
   "numpy>=1.26",
   "python-chess>=1.999",
   "PyYAML>=6.0",
@@ -19,6 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+puzzles = ["pyarrow>=18"]
 dev = [
   "mypy>=1.10",
   "numpy<2.5",
@@ -36,6 +38,9 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"chess_ai.gui" = ["assets/chessnut/*"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
@@ -63,4 +68,8 @@ show_error_codes = true
 
 [[tool.mypy.overrides]]
 module = ["chess.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
 ignore_missing_imports = true

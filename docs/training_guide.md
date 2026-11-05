@@ -1,5 +1,17 @@
 # Training guide (Windows PowerShell)
 
+For the 250,000-puzzle selection, resumable CPU value labeling, full-corpus-plus-puzzles scratch
+training and puzzle-only champion fine-tuning, see [the puzzle runbook](puzzle_training.md).
+
+For the explicitly authorized `ZaatarTheCat` Bot API connection, token storage, readiness check,
+and user-run online command, see [the Lichess guide](lichess_bot.md). Online games are recorded
+as evaluation-only PGNs and never automatically enter training or change the champion.
+
+On 2026-11-04 the user promoted full-corpus scratch epoch 99; see
+[the promotion record](full_gm_rebuild.md#scratch-promotion-2026-11-04).
+Older signed experiments retain their epoch-60 baseline. Their registry guards intentionally
+reject further staged work after this promotion; reserve a new run for new champion-based jobs.
+
 For separately testable search/tactics experiments and fresh failure-driven Stockfish training,
 see [the experiment README](search_experiments/README.md). Independent outputs preserve the
 champion, current full-corpus job, and holdouts. Search arms need no retraining; the failure-data
