@@ -9,7 +9,7 @@ import math
 import os
 import random
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -189,6 +189,9 @@ def _checkpoint_results(
     search_simulations: int = 0,
     c_puct: float = 1.5,
     opening_book: Path | None = None,
+    search_seconds: float | None = None,
+    opening_index_start: int = 0,
+    on_game: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     neural = (
         NeuralMCTSAgent(
@@ -198,6 +201,7 @@ def _checkpoint_results(
             c_puct=c_puct,
             seed=seed,
             name=f"{role} PUCT ({checkpoint.name})",
+            search_seconds=search_seconds,
         )
         if search_simulations > 0
         else NeuralAgent(
@@ -211,7 +215,9 @@ def _checkpoint_results(
     )
     games: list[dict[str, Any]] = []
     try:
-        for opening_index, (board, moves, opening_seed) in enumerate(opening_suite):
+        for opening_index, (board, moves, opening_seed) in enumerate(
+            opening_suite, start=opening_index_start
+        ):
             for neural_color in (chess.WHITE, chess.BLACK):
                 color_name = "white" if neural_color == chess.WHITE else "black"
                 opponent = MinimaxAgent(
@@ -250,6 +256,11 @@ def _checkpoint_results(
                         "OpeningBook": str(opening_book or ""),
                     },
                 )
+                timings = (
+                    [move.elapsed_seconds for move in result.moves if move.color == neural_color]
+                    if search_seconds is not None
+                    else []
+                )
                 if result.result == "1/2-1/2":
                     outcome = "draw"
                 else:
@@ -265,8 +276,18 @@ def _checkpoint_results(
                         "termination": result.termination,
                         "plies_after_opening": result.plies,
                         "pgn_path": str(result.pgn_path),
+                        **(
+                            {
+                                "mean_neural_move_seconds": sum(timings) / len(timings),
+                                "max_neural_move_seconds": max(timings),
+                            }
+                            if timings
+                            else {}
+                        ),
                     }
                 )
+                if on_game is not None:
+                    on_game(games[-1])
     finally:
         del neural
         gc.collect()
@@ -302,13 +323,19 @@ def _direct_baseline_results(
     pgn_dir: Path,
     search_simulations: int,
     c_puct: float,
+    search_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Candidate directly faces the baseline on the same two-color holdout suite."""
 
     def agent(path: Path) -> NeuralAgent:
         return (
             NeuralMCTSAgent(
-                path, device=device, simulations=search_simulations, c_puct=c_puct, seed=seed
+                path,
+                device=device,
+                simulations=search_simulations,
+                c_puct=c_puct,
+                seed=seed,
+                search_seconds=search_seconds,
             )
             if search_simulations
             else NeuralAgent(path, device=device, seed=seed)
@@ -400,6 +427,7 @@ def run_paired_audit(
     exclude_manifest: str | Path | None = None,
     search_simulations: int = 0,
     c_puct: float = 1.5,
+    search_seconds: float | None = None,
     direct_baseline: bool = False,
     additional_exclude_manifests: Sequence[str | Path] = (),
     opening_book: str | Path | None = None,
@@ -439,6 +467,10 @@ def run_paired_audit(
         raise ValueError("search_simulations must be a non-negative integer")
     if not math.isfinite(c_puct) or c_puct <= 0.0:
         raise ValueError("c_puct must be finite and positive")
+    if search_seconds is not None and (
+        not search_simulations or not math.isfinite(search_seconds) or search_seconds <= 0
+    ):
+        raise ValueError("A finite positive search deadline requires PUCT simulations")
     conflicts = [*destination.glob("**/*.pgn"), destination / "report.json"]
     conflicts = [path for path in conflicts if path.exists()]
     if conflicts:
@@ -468,7 +500,8 @@ def run_paired_audit(
         pgn_dir=destination,
         search_simulations=search_simulations,
         c_puct=c_puct,
-        **({"opening_book": book} if book is not None else {}),
+        search_seconds=search_seconds,
+        opening_book=book,
     )
     champion_stats, champion_games = _checkpoint_results(
         champion,
@@ -481,7 +514,8 @@ def run_paired_audit(
         pgn_dir=destination,
         search_simulations=search_simulations,
         c_puct=c_puct,
-        **({"opening_book": book} if book is not None else {}),
+        search_seconds=search_seconds,
+        opening_book=book,
     )
     point_delta = float(candidate_stats["points"]) - float(champion_stats["points"])
     standard_non_regression = float(candidate_stats["standard_points"]) >= float(
@@ -499,6 +533,7 @@ def run_paired_audit(
             pgn_dir=destination,
             search_simulations=search_simulations,
             c_puct=c_puct,
+            search_seconds=search_seconds,
         )
         if direct_baseline
         else None
@@ -532,6 +567,7 @@ def run_paired_audit(
         "audit_seed": audit_seed,
         "opponent_depth": opponent_depth,
         "search_simulations": search_simulations,
+        "search_seconds": search_seconds,
         "c_puct": c_puct,
         "opening_book": str(book) if book is not None else None,
         "opening_book_sha256": _sha256_file(book) if book is not None else None,

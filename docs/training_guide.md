@@ -7,10 +7,10 @@ For the explicitly authorized `ZaatarTheCat` Bot API connection, token storage, 
 and user-run online command, see [the Lichess guide](lichess_bot.md). Online games are recorded
 as evaluation-only PGNs and never automatically enter training or change the champion.
 
-On 2026-11-04 the user promoted full-corpus scratch epoch 99; see
-[the promotion record](full_gm_rebuild.md#scratch-promotion-2026-11-04).
-Older signed experiments retain their epoch-60 baseline. Their registry guards intentionally
-reject further staged work after this promotion; reserve a new run for new champion-based jobs.
+On 2026-11-12 the user promoted full-corpus-plus-puzzles scratch epoch 70.
+Registry guards in existing signed runs may reject further stages after promotion.
+Reserve a new run for new champion-based training.
+See [the promotion record](puzzle_training.md#scratch-promotion-2026-11-12).
 
 For separately testable search/tactics experiments and fresh failure-driven Stockfish training,
 see [the experiment README](search_experiments/README.md). Independent outputs preserve the

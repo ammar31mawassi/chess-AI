@@ -49,6 +49,7 @@ class BotConfig:
     minimum_increment: int = 3
     maximum_increment: int = 30
     max_search_seconds: float = 1.0
+    search_simulations: int = 32
     seed: int = 5112026
     opponent_kind: str = "human"
     ai_level: int | None = None
@@ -79,6 +80,8 @@ class BotConfig:
             raise ValueError("A positive increment is required")
         if not math.isfinite(self.max_search_seconds) or self.max_search_seconds <= 0:
             raise ValueError("max_search_seconds must be finite and positive")
+        if type(self.search_simulations) is not int or self.search_simulations < 1:
+            raise ValueError("search_simulations must be a positive integer")
         # Keep online games within the existing evaluation-only import boundary.
         if not self.output_dir.resolve().is_relative_to(Path("data/games/evaluation").resolve()):
             raise ValueError("Online games must stay under data/games/evaluation")
@@ -140,17 +143,19 @@ class MoveAgent(Protocol):
 
 
 class ClockedPUCT(NeuralMCTSAgent):
-    """Production PUCT32 with an online-only soft clock budget between traversals."""
+    """PUCT with a soft deadline adjusted to the live game clock."""
 
-    def __init__(self, checkpoint: Path, *, device: str, seed: int, max_seconds: float) -> None:
-        super().__init__(checkpoint, device=device, seed=seed, simulations=32, c_puct=1.5)
+    def __init__(
+        self, checkpoint: Path, *, device: str, seed: int, max_seconds: float, simulations: int = 32
+    ) -> None:
+        super().__init__(checkpoint, device=device, seed=seed, simulations=simulations, c_puct=1.5)
         self.max_seconds = max_seconds
 
     def choose_timed(self, board: chess.Board, remaining_ms: int, increment_ms: int) -> chess.Move:
         if board.is_game_over(claim_draw=True):
             raise LichessError("Cannot search a terminal board")
         # Preserve a network/transport reserve. Emergency move selection is legal
-        # and deterministic; normal clocks use the audited PUCT32 traversal rule.
+        # and deterministic.
         if remaining_ms <= 500:
             return min(board.legal_moves, key=self._move_encoder.encode)
         budget = min(self.max_seconds, (remaining_ms - 500) / 40000 + increment_ms / 10000)
@@ -239,7 +244,7 @@ class GameSession:
             "rated": False,
             "initial_fen": chess.STARTING_FEN,
             "checkpoint_sha256": self.config.checkpoint_sha256,
-            "search_simulations": 32,
+            "search_simulations": self.config.search_simulations,
             "c_puct": 1.5,
             "max_search_seconds": self.config.max_search_seconds,
             "clock": event.get("clock"),
@@ -364,7 +369,7 @@ class GameSession:
                         "move": board.uci(move),
                         "seconds": time.perf_counter() - before,
                         "remaining_ms": remaining,
-                        "simulations_cap": 32,
+                        "simulations_cap": self.config.search_simulations,
                     }
                 )
                 + "\n"

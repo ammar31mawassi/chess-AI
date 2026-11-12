@@ -40,6 +40,7 @@ def main() -> None:
             device=config.device,
             seed=config.seed,
             max_seconds=config.max_search_seconds,
+            simulations=config.search_simulations,
         )
         import chess
 
@@ -60,7 +61,8 @@ def main() -> None:
                 "ongoing_games": len(ongoing),
                 "checkpoint": str(checkpoint),
                 "device": config.device,
-                "simulations_cap": 32,
+                "simulations_cap": config.search_simulations,
+                "max_search_seconds": config.max_search_seconds,
                 "casual_standard_humans_only": True,
             },
             indent=2,

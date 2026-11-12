@@ -124,7 +124,7 @@ def test_artwork_board_resizes_and_flip_preserves_click_targets(
         root = tk.Tk()
     except tk.TclError:
         pytest.skip("Tk display is unavailable")
-    monkeypatch.setattr("chess_ai.gui.app.resolve_gui_defaults", lambda *args: (None, 0, 1.5))
+    monkeypatch.setattr("chess_ai.gui.app.resolve_gui_defaults", lambda *args: (None, 0, 1.5, None))
     monkeypatch.setattr(
         "chess_ai.gui.app.create_session_training_plan", lambda **kwargs: _training_plan(tmp_path)
     )

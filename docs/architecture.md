@@ -20,11 +20,10 @@ against both the session target and daily allowance, and persists version-2 resu
 summaries. It migrates version-1 bot batches without rewriting their old summaries. Human and
 built-in-computer modes, per-game version-1 journals and champion/search settings remain intact.
 
-The current registered champion is the full-GM-corpus scratch model at epoch 99, explicitly
-promoted on 2026-11-04 after matched development and fresh confirmation. Production inference
-remains PUCT32, `c_puct=1.5`, no book. The prior epoch-60 checkpoint and registry are archived;
-historical pilot configurations below retain that frozen baseline. See
-[the promotion record](full_gm_rebuild.md#scratch-promotion-2026-11-04).
+The registered champion is the full-corpus-plus-puzzles scratch model at epoch 70, promoted
+on 2026-11-12. The GUI uses a five-second deadline when it launches the registered champion
+with default options. The bot config supplies the clock-adjusted live budget of up to five seconds.
+See [the promotion record](puzzle_training.md#scratch-promotion-2026-11-12).
 
 The [endgame pilot](endgame_pilot.md) adds bounded material/score sampling from approved
 training catalogs and grouped synthetic roots, protects historical evaluation inputs,

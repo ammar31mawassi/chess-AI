@@ -11,6 +11,7 @@ import threading
 import urllib.error
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import chess
 import chess.pgn
@@ -20,7 +21,7 @@ import torch
 from chess_ai.agents.neural_mcts_agent import NeuralMCTSAgent
 from chess_ai.model.checkpoint import save_checkpoint
 from chess_ai.model.policy_value_net import PolicyValueNet
-from chess_ai.online import credentials
+from chess_ai.online import credentials, lichess_bot
 from chess_ai.online.lichess_api import LichessAPI, LichessError, _NoRedirect
 from chess_ai.online.lichess_bot import (
     BotConfig,
@@ -313,6 +314,20 @@ def test_config_requires_evaluation_directory_and_valid_ranges(config):
         replace(config, output_dir=Path("data/datasets/online"))
     with pytest.raises(ValueError, match="increment"):
         replace(config, minimum_increment=0)
+    with pytest.raises(ValueError, match="search_simulations"):
+        replace(config, search_simulations=0)
+
+
+def test_clocked_agent_uses_configured_cap_and_five_second_deadline(tmp_path, monkeypatch):
+    path = save_checkpoint(tmp_path / "model.pt", PolicyValueNet(channels=8, residual_blocks=0))
+    agent = ClockedPUCT(path, device="cpu", seed=5112026, max_seconds=5, simulations=1_000_000)
+    clock = iter([0.0, *([4.9] * 33), 5.0])
+    monkeypatch.setattr(lichess_bot, "time", SimpleNamespace(perf_counter=lambda: next(clock)))
+    traversals = []
+    monkeypatch.setattr(agent, "_simulate", lambda board, root: traversals.append(root))
+    board = chess.Board()
+    assert agent.choose_timed(board, 300_000, 3000) in board.legal_moves
+    assert len(traversals) == 33
 
 
 def test_http_errors_redact_tokens_and_429_imposes_cooldown(monkeypatch):
