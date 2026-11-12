@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import chess
 import numpy as np
 import pytest
 
+from chess_ai.agents import neural_mcts_agent
 from chess_ai.agents.neural_agent import NeuralAgentError
 from chess_ai.agents.neural_mcts_agent import NeuralMCTSAgent, _terminal_value
 from chess_ai.model.checkpoint import save_checkpoint
@@ -15,6 +17,20 @@ from chess_ai.model.policy_value_net import PolicyValueNet
 def _checkpoint(path: Path) -> Path:
     model = PolicyValueNet(channels=8, residual_blocks=0)
     return save_checkpoint(path, model)
+
+
+def test_mcts_stops_at_deadline_before_simulation_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _checkpoint(tmp_path / "timed.pt")
+    agent = NeuralMCTSAgent(path, device="cpu", simulations=32, search_seconds=5)
+    clock = iter((0.0, 0.0, 5.0))
+    monkeypatch.setattr(
+        neural_mcts_agent, "time", SimpleNamespace(perf_counter=lambda: next(clock))
+    )
+    board = chess.Board()
+    assert agent.choose_move(board) in board.legal_moves
+    assert next(clock, None) is None
 
 
 def test_mcts_returns_a_legal_deterministic_move_without_mutating_board(

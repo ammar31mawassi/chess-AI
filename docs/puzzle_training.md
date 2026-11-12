@@ -2,8 +2,8 @@
 
 The user authorized import of 250,000 puzzles and two separate experiments on 2026-11-05.
 The frozen CC0 snapshot is `downloaded_datasets/lichess_puzzles/hf_461725966ea4`, revision
-`461725966ea46898ec6481372a6326de3281bfbd` (6,157,341 puzzles). This is supervised training,
-not reinforcement learning. The registered scratch epoch-99 champion remains unchanged.
+`461725966ea46898ec6481372a6326de3281bfbd` (6,157,341 puzzles). The experiment used the
+full-corpus scratch epoch-99 champion as its frozen baseline.
 
 ## Selection and boundaries
 
@@ -151,9 +151,58 @@ foreach ($candidate in $candidates) {
 }
 ```
 
+For a timed development comparison, pass `--search-seconds 5` to either
+`--stage evaluate` or `python -m chess_ai paired-audit`. Use
+`--search-simulations 32` for PUCT32 with the five-second ceiling, and
+`--search-simulations 1000000` to let the deadline determine the search length.
+Both options apply to each neural checkpoint. D1/D2 retain their fixed depths.
+PUCT checks elapsed time between traversals, so the last traversal can push a
+move past five seconds. Use identical validation rows, opening seeds, and
+exclusions across budgets. Timed puzzle reports include mean and maximum move
+time and use separate directories for each budget. Use a fresh PGN output
+directory per audit. Timed audit reports record the budget and per-game neural
+move timings.
+
+To compare five-second scratch search with the frozen champion at PUCT32,
+run the following from the repository root.
+
+```powershell
+$stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+& .\.venv\Scripts\python.exe scripts/puzzle_search_match.py --device cuda `
+    --output "data/games/evaluation/puzzle_search_match_$stamp"
+```
+
+The script uses ten seeded openings of two to three full moves and tests both
+colors against local minimax D2. Each of the 40 completed games prints a line
+such as `Game 1 | Scratch | White | Win | Opening 1/10`. The report records
+opening moves, checkpoint hashes, search settings, and game results as they
+are saved. The score compares the two model-and-search settings together.
+
 Keep the 12,500 confirmation puzzles untouched during development. The explicit
 `--split confirmation` option exists for a later, single nominated candidate after reviewing
 development evidence. It must not become another epoch-selection set.
+
+## Scratch promotion (2026-11-12)
+
+The user promoted the puzzle scratch arm's epoch-70 `best.pt` after the D2 comparison
+on ten openings played in both colors.
+
+| Search budget | Puzzle scratch | Previous champion |
+| --- | ---: | ---: |
+| PUCT32 | 10.5/20 | 9/20 |
+| Five seconds | 18.5/20 | 18/20 |
+
+The registry records the checkpoint checksum and the three evaluation report hashes.
+Both margins are descriptive results on the same opening set. The previous checkpoint
+and its registry are archived under `checkpoints/champions`.
+
+The default GUI uses a five-second deadline and `c_puct=1.5`. Lichess uses the new checkpoint
+with a five-second maximum per-move search budget, adjusted to the game clock. Start the
+updated bot from PowerShell:
+
+```powershell
+chess-bot 100
+```
 
 ## Implementation verification
 

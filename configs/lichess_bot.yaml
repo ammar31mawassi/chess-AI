@@ -2,12 +2,13 @@ lichess_bot:
   format: self-improving-chess-ai.lichess-bot
   version: 1
   username: ZaatarTheCat
-  checkpoint_sha256: 8faa6ba938b6d467001a11c7e1e2e3b4a0cba8bdeebc06878ca805d5b6cd478a
+  checkpoint_sha256: c10650a082e04cb6f8685ea7f4e00f7241a1e5c06061be08e808eb3145fc0c9a
   device: cuda
   output_dir: data/games/evaluation/lichess_bot
   minimum_seconds: 300
   maximum_seconds: 1800
   minimum_increment: 3
   maximum_increment: 30
-  max_search_seconds: 1.0
+  max_search_seconds: 5.0
+  search_simulations: 1000000
   seed: 5112026

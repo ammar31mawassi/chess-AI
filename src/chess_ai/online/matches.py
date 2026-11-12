@@ -360,6 +360,7 @@ def main() -> None:
         device=config.device,
         seed=config.seed,
         max_seconds=config.max_search_seconds,
+        simulations=config.search_simulations,
     )
     agent.evaluate(chess.Board())
     if not human and not computer:

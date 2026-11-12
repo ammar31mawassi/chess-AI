@@ -21,10 +21,10 @@ live process. API credentials are stored outside Git using Windows DPAPI or an e
 The [terminal batch command](docs/lichess_terminal.md) defaults to five concurrent bot opponents,
 supports an explicit concurrency override, and resumes unfinished batches with their saved results.
 
-The registered gameplay champion is the **full-corpus scratch model, epoch 99**, explicitly
-promoted on 2026-11-04 after matched development and fresh confirmation. Default GUI launches
-use PUCT 32, `c_puct=1.5`, and no opening book. The previous epoch-60 champion remains archived.
-See [the promotion record and results](docs/full_gm_rebuild.md#scratch-promotion-2026-11-04).
+The registered gameplay champion is the **full-corpus-plus-puzzles scratch model, epoch 70**,
+promoted on 2026-11-12. Default GUI launches use a five-second PUCT search with `c_puct=1.5`.
+The Lichess bot uses a clock-adjusted search budget of up to five seconds per move.
+See [the promotion record and results](docs/puzzle_training.md#scratch-promotion-2026-11-12).
 
 Independent opt-in search and failure-training experiments are documented in
 [the experiment README](docs/search_experiments/README.md): profiling, exact-input neural caching,

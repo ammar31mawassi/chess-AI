@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,11 +67,17 @@ class NeuralMCTSAgent(NeuralAgent):
         c_puct: float = 1.5,
         seed: int | None = None,
         name: str | None = None,
+        search_seconds: float | None = None,
     ) -> None:
         if isinstance(simulations, bool) or not isinstance(simulations, int) or simulations <= 0:
             raise ValueError("simulations must be a positive integer")
         if not math.isfinite(c_puct) or c_puct <= 0.0:
             raise ValueError("c_puct must be finite and positive")
+        if search_seconds is not None and (
+            not math.isfinite(search_seconds) or search_seconds <= 0
+        ):
+            raise ValueError("search_seconds must be finite and positive")
+        self.search_seconds = search_seconds
         super().__init__(
             checkpoint,
             device=device,
@@ -137,7 +144,11 @@ class NeuralMCTSAgent(NeuralAgent):
         return parent_value
 
     def choose_move(self, board: chess.Board) -> chess.Move:
-        """Run exactly ``simulations`` root traversals and return the visit winner."""
+        """Return the visit winner after the traversal limit or optional soft deadline."""
+
+        deadline = (
+            time.perf_counter() + self.search_seconds if self.search_seconds is not None else None
+        )
 
         if board.is_game_over(claim_draw=True):
             raise NeuralAgentError("Cannot choose a move because the game is already over")
@@ -147,6 +158,8 @@ class NeuralMCTSAgent(NeuralAgent):
         root = _Node()
         self._expand(search_board, root)
         for _ in range(self.simulations):
+            if deadline is not None and time.perf_counter() >= deadline:
+                break
             self._simulate(search_board, root)
 
         selected_action, _edge = max(

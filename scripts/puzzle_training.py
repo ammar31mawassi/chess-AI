@@ -26,6 +26,8 @@ def main() -> None:
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--search-simulations", type=int, default=32)
+    parser.add_argument("--search-seconds", type=float, help="Soft PUCT deadline per move")
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--split", choices=("validation", "confirmation"), default="validation")
     args = parser.parse_args()
@@ -52,7 +54,13 @@ def main() -> None:
         if args.checkpoint is None:
             parser.error("evaluate requires --checkpoint")
         result = workflow.evaluate(
-            root, args.checkpoint, limit=args.limit, device=args.device, split=args.split
+            root,
+            args.checkpoint,
+            limit=args.limit,
+            device=args.device,
+            split=args.split,
+            search_simulations=args.search_simulations,
+            search_seconds=args.search_seconds,
         )
     else:
         workflow.train(root, args.arm, resume=args.resume, device=args.device)

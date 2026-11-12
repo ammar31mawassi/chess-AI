@@ -122,16 +122,21 @@ def resolve_gui_defaults(
     c_puct: float | None = None,
     *,
     checkpoint_root: str | Path = "checkpoints",
-) -> tuple[Path | None, int, float]:
-    """Apply promoted settings only when no explicit checkpoint was requested."""
+) -> tuple[Path | None, int, float, float | None]:
+    """Use timed search for the default champion and honor explicit overrides."""
 
     champion = load_gameplay_champion(checkpoint_root) if checkpoint is None else None
     discovered: Path | None
+    search_seconds = None
     if champion is not None:
         discovered = champion.checkpoint
-        simulations = (
-            champion.search_simulations if search_simulations is None else search_simulations
-        )
+        if search_simulations is None and champion.search_simulations > 0:
+            simulations = 1_000_000
+            search_seconds = 5.0
+        else:
+            simulations = (
+                champion.search_simulations if search_simulations is None else search_simulations
+            )
         exploration = champion.c_puct if c_puct is None else c_puct
     else:
         discovered = (
@@ -145,7 +150,7 @@ def resolve_gui_defaults(
         raise ValueError("search_simulations must be a non-negative integer")
     if isinstance(exploration, bool) or not math.isfinite(exploration) or exploration <= 0:
         raise ValueError("c_puct must be finite and positive")
-    return discovered, simulations, exploration
+    return discovered, simulations, exploration, search_seconds
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,7 +192,7 @@ class NeuralChessApp:
         self.root.minsize(900, 640)
         self.root.configure(background=BACKGROUND)
 
-        discovered, simulations, exploration = resolve_gui_defaults(
+        discovered, simulations, exploration, search_seconds = resolve_gui_defaults(
             checkpoint, search_simulations, c_puct
         )
         self.checkpoint_var = tk.StringVar(value=str(discovered or ""))
@@ -197,13 +202,14 @@ class NeuralChessApp:
         self.opening_book = Path(opening_book) if opening_book is not None else None
         self.search_simulations = simulations
         self.c_puct = exploration
+        self.search_seconds = search_seconds
         self.dataset_var = tk.StringVar(value=str(dataset_path))
         self.status_var = tk.StringVar(value="Choose a checkpoint, then start a new game.")
         self.session_var = tk.StringVar(value="Preparing automatic training files...")
 
         self.pgn_dir = Path(pgn_dir)
         self.controller: HumanNeuralGame | None = None
-        self._agent_cache: tuple[Path, str, int, float, NeuralAgent] | None = None
+        self._agent_cache: tuple[Path, str, int, float, float | None, NeuralAgent] | None = None
         self._selected_square: chess.Square | None = None
         self._legal_destinations: set[chess.Square] = set()
         self._flipped = human_color == "black"
@@ -573,14 +579,20 @@ class NeuralChessApp:
     def _load_agent(self, checkpoint: Path, device: str) -> NeuralAgent:
         resolved = checkpoint.resolve()
         if self._agent_cache is not None:
-            cached_path, cached_device, cached_simulations, cached_c_puct, cached_agent = (
-                self._agent_cache
-            )
+            (
+                cached_path,
+                cached_device,
+                cached_simulations,
+                cached_c_puct,
+                cached_seconds,
+                cached_agent,
+            ) = self._agent_cache
             if (
                 cached_path == resolved
                 and cached_device == device
                 and cached_simulations == self.search_simulations
                 and cached_c_puct == self.c_puct
+                and cached_seconds == self.search_seconds
             ):
                 return cached_agent
         agent = (
@@ -589,6 +601,7 @@ class NeuralChessApp:
                 device=device,
                 simulations=self.search_simulations,
                 c_puct=self.c_puct,
+                search_seconds=self.search_seconds,
                 seed=0,
             )
             if self.search_simulations > 0
@@ -605,6 +618,7 @@ class NeuralChessApp:
             device,
             self.search_simulations,
             self.c_puct,
+            self.search_seconds,
             agent,
         )
         return agent

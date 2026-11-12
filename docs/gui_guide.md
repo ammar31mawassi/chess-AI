@@ -48,12 +48,13 @@ record, discovery prefers the newest successful `checkpoints/human_sessions/**/b
 stays blank for you to browse. `--device auto` uses CUDA when the installed PyTorch build can access
 it and otherwise uses CPU.
 
-The champion promoted on 2026-11-04 is the full-corpus scratch model, frozen at epoch 99 in
-`checkpoints/champions/full_gm_rebuild_v1_20261031_01_scratch_epoch_0099.pt`, with 32 PUCT
-simulations, `c_puct=1.5`, and no opening book. The previous epoch-60 checkpoint and full
-registry record remain archived. Launch the current champion with `python -m chess_ai gui --device cuda`.
+The champion promoted on 2026-11-12 is the full-corpus-plus-puzzles scratch model, frozen at
+epoch 70. The default GUI uses a five-second soft deadline per move, a one-million-simulation
+cap, and `c_puct=1.5`. A simulation already in progress can overrun the deadline.
+Launch it with `python -m chess_ai gui --device cuda`.
 An explicit `--search-simulations 0` overrides search with greedy play. An explicit `--checkpoint`
 bypasses champion discovery and defaults to greedy play unless a simulation count is supplied.
+An explicit positive `--search-simulations` selects a fixed simulation budget.
 New training outputs do not replace the registered champion on the next launch.
 
 Every launch reserves a unique GUI session ID before training can begin. The ID names a generated
@@ -76,7 +77,7 @@ The command options are:
 | `--checkpoint PATH` | local discovery | Neural model used for the opponent |
 | `--human-color white\|black` | `white` | Human's color for the first game |
 | `--device auto\|cpu\|cuda` | `auto` | PyTorch inference device |
-| `--search-simulations N` | champion setting, otherwise `0` | PUCT budget; `0` selects greedy play |
+| `--search-simulations N` | five-second search for the default PUCT champion, otherwise `0` | Fixed PUCT budget when supplied. `0` selects greedy play |
 | `--c-puct NUMBER` | champion setting, otherwise `1.5` | PUCT exploration constant |
 | `--opening-book PATH` | off | Optional runtime book before neural play |
 | `--pgn-dir PATH` | `data/games/human_gui` | Independent game-record directory |

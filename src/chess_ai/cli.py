@@ -548,6 +548,7 @@ def command_paired_audit(args: argparse.Namespace) -> int:
         exclude_manifest=args.exclude_manifest,
         search_simulations=args.search_simulations,
         c_puct=args.c_puct,
+        search_seconds=args.search_seconds,
         direct_baseline=args.direct_baseline,
         additional_exclude_manifests=args.exclude_additional_manifest,
         opening_book=args.opening_book,
@@ -1266,6 +1267,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="PUCT traversals per neural move; zero keeps greedy policy play",
     )
+    paired_audit.add_argument("--search-seconds", type=float, help="Soft PUCT deadline per move")
     paired_audit.add_argument("--c-puct", type=float, default=1.5)
     paired_audit.add_argument(
         "--opening-book", type=Path, help="same compiled runtime book for candidate and champion"

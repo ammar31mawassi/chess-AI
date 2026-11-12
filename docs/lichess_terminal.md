@@ -53,8 +53,8 @@ Pending offers reserve both a game slot and daily allowance, so five outstanding
 spend the last available game five times. Outgoing requests are sequential, at least five seconds
 apart. Slots refill as games finish. On quota exhaustion or a matchmaking error, new challenges
 halt while already-live games finish. A shared model/search lock protects CUDA inference; its
-queue time is deducted from each game's clock. The existing PUCT32 cap and one-second soft
-search budget remain unchanged. Increasing concurrency does not guarantee proportional speedup.
+queue time is deducted from each game's clock. The bot uses a soft deadline of up to five seconds
+per move and a one-million-traversal cap. The game clock can shorten the search budget.
 
 ```powershell
 chess-bot human

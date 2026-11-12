@@ -35,7 +35,7 @@ def test_registered_champion_overrides_newer_unpromoted_sessions(tmp_path, champ
     args = build_parser().parse_args(["gui"])
     assert resolve_gui_defaults(
         args.checkpoint, args.search_simulations, args.c_puct, checkpoint_root=tmp_path
-    ) == (checkpoint, 32, 1.5)
+    ) == (checkpoint, 1_000_000, 1.5, 5.0)
 
 
 def test_explicit_checkpoint_and_search_overrides(tmp_path, champion_record):
@@ -44,10 +44,22 @@ def test_explicit_checkpoint_and_search_overrides(tmp_path, champion_record):
         checkpoint,
         0,
         1.25,
+        None,
     )
     rollback = Path("old_epoch_0120.pt")
-    assert resolve_gui_defaults(rollback, checkpoint_root=tmp_path) == (rollback, 0, 1.5)
-    assert resolve_gui_defaults(rollback, 32, 1.5, checkpoint_root=tmp_path) == (rollback, 32, 1.5)
+    assert resolve_gui_defaults(search_simulations=32, checkpoint_root=tmp_path) == (
+        checkpoint,
+        32,
+        1.5,
+        None,
+    )
+    assert resolve_gui_defaults(rollback, checkpoint_root=tmp_path) == (rollback, 0, 1.5, None)
+    assert resolve_gui_defaults(rollback, 32, 1.5, checkpoint_root=tmp_path) == (
+        rollback,
+        32,
+        1.5,
+        None,
+    )
 
 
 @pytest.mark.parametrize("delete", [False, True])
@@ -65,7 +77,7 @@ def test_damaged_champion_fails_instead_of_selecting_another_model(
     with pytest.raises(ValueError, match="Invalid gameplay champion"):
         discover_default_checkpoint(tmp_path)
     # An explicit rollback remains usable even if the champion record is broken.
-    assert resolve_gui_defaults(fallback, checkpoint_root=tmp_path) == (fallback, 0, 1.5)
+    assert resolve_gui_defaults(fallback, checkpoint_root=tmp_path) == (fallback, 0, 1.5, None)
 
 
 @pytest.mark.parametrize(
@@ -88,4 +100,4 @@ def test_unknown_record_or_invalid_inference_settings_fail(tmp_path, champion_re
 
 def test_no_champion_keeps_existing_greedy_discovery_defaults(tmp_path):
     assert load_gameplay_champion(tmp_path) is None
-    assert resolve_gui_defaults(checkpoint_root=tmp_path) == (None, 0, 1.5)
+    assert resolve_gui_defaults(checkpoint_root=tmp_path) == (None, 0, 1.5, None)

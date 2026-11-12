@@ -588,6 +588,8 @@ def evaluate(
     limit: int = 1000,
     device: str = "cuda",
     split: str = "validation",
+    search_simulations: int = 32,
+    search_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Resumable first-solver-move benchmark, not a whole-line solve-rate claim."""
     if split not in {"validation", "confirmation"} or limit < 1:
@@ -598,6 +600,8 @@ def evaluate(
         raise ValueError("Empty puzzle evaluation split")
     digest = sha256_file(checkpoint)
     output = root / "evaluation" / f"{split}_{len(rows)}_{digest[:16]}"
+    if search_simulations != 32 or search_seconds is not None:
+        output = output.with_name(f"{output.name}_s{search_simulations}_t{search_seconds}")
     binding = {
         "format": FORMAT + ".evaluation",
         "version": 1,
@@ -605,7 +609,8 @@ def evaluate(
         "checkpoint_sha256": digest,
         "split": split,
         "ids": [r["id"] for r in rows],
-        "search_simulations": 32,
+        "search_simulations": search_simulations,
+        **({"search_seconds": search_seconds} if search_seconds is not None else {}),
         "c_puct": 1.5,
         "seed": plan["seed"],
     }
@@ -620,13 +625,22 @@ def evaluate(
         else:
             predictions = {}
         agent = NeuralMCTSAgent(
-            checkpoint, device=device, seed=plan["seed"], simulations=32, c_puct=1.5
+            checkpoint,
+            device=device,
+            seed=plan["seed"],
+            simulations=search_simulations,
+            c_puct=1.5,
+            search_seconds=search_seconds,
         )
         for row in rows:
             if row["id"] in predictions:
                 continue
-            move = agent.choose_move(chess.Board(row["fen"]))
+            board = chess.Board(row["fen"])
+            started = time.perf_counter()
+            move = agent.choose_move(board)
             predictions[row["id"]] = {"move": move.uci(), "correct": move.uci() in row["targets"]}
+            if search_seconds is not None:
+                predictions[row["id"]]["move_seconds"] = time.perf_counter() - started
             if len(predictions) % 25 == 0 or len(predictions) == len(rows):
                 signed(saved, {"binding": binding, "predictions": predictions})
                 print(f"Puzzle first-move audit: {len(predictions)}/{len(rows)}", flush=True)
@@ -641,5 +655,9 @@ def evaluate(
             "training_updates": 0,
             "report": str(output / "report.json"),
         }
+        if search_seconds is not None:
+            timings = [predictions[row["id"]]["move_seconds"] for row in rows]
+            result["mean_move_seconds"] = sum(timings) / len(timings)
+            result["max_move_seconds"] = max(timings)
         atomic_json(output / "report.json", result)
         return result

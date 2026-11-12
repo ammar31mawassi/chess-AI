@@ -14,9 +14,9 @@ Numeric terminal batches now default to five concurrent BOT games; `--concurrenc
 the limit and repeating the same target resumes the latest incomplete batch, including legacy
 single-game sessions. Human/computer terminal modes remain single-game.
 
-`configs/lichess_bot.yaml` pins the registered scratch epoch-99 champion, SHA256
-`8faa6ba938b6d467001a11c7e1e2e3b4a0cba8bdeebc06878ca805d5b6cd478a`.
-Startup verifies the champion checksum and PUCT32 / c_puct=1.5 settings. The model loads once and
+`configs/lichess_bot.yaml` pins the registered full-corpus-plus-puzzles scratch epoch-70 champion,
+SHA256 `c10650a082e04cb6f8685ea7f4e00f7241a1e5c06061be08e808eb3145fc0c9a`.
+Startup verifies the champion checksum and registry settings. The model loads once and
 warms up before accepting challenges. No Stockfish, book, tablebase, or online evaluation lookup
 participates in choosing moves. There is no live training, checkpoint update, or automatic promotion.
 
@@ -29,10 +29,10 @@ tournaments, or plays rated games.
 
 The API adapter reconstructs the full server move history with `python-chess` on every state update.
 Production PUCT's side-to-move values and move ordering are unchanged. An online-only subclass
-caps search at 32 traversals and checks a soft clock budget between traversals: at most one second,
-with a 500ms reserve. At <=500ms it chooses a deterministic legal emergency move without inference.
-This deadline can overshoot during a neural forward call; online strength is not guaranteed identical
-to unlimited-time offline PUCT32 under time pressure. GPU training should run separately from live play.
+checks a soft deadline between traversals. The configuration sets a five-second maximum and a
+one-million-traversal cap. The remaining clock and increment can shorten the budget. At 500 ms
+or less it chooses a deterministic legal emergency move. A traversal in progress can overrun the
+deadline. GPU training should run separately from live play.
 
 ## Credentials
 
