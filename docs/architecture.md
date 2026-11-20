@@ -1,5 +1,10 @@
 # Architecture
 
+The public Vercel workbench uses a stateless Python move API. It replays UCI history with
+python-chess and runs the shared five-second PUCT search against an ONNX export of the
+registered champion. The browser renders board state, legal destinations, and move history.
+See [the web deployment guide](../web/README.md).
+
 The [Lichess puzzle experiments](puzzle_training.md) explicitly select and validate 250,000
 puzzles, protect old inputs, journal compatible Stockfish value labels, and reserve separate
 full-corpus scratch and puzzle-only champion fine-tune arms. Solver moves supply policy labels;
