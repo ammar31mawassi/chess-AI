@@ -1,5 +1,8 @@
 # Self-Improving Chess AI
 
+[Play the champion online](https://neural-chess-champion.vercel.app) or see
+[how to deploy the web workbench](web/README.md).
+
 An educational, local Python project for learning how a chess AI is assembled from reliable rules,
 position/move encodings, classical search, a policy-value neural network, supervised data, training,
 and controlled evaluation.

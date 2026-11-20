@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Play a game of chess against the Scratch neural champion.">
+  <title>Neural Chess | Play the champion</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/play.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand"><span class="mark" aria-hidden="true">♞</span> Neural Chess</div>
+    <a href="https://github.com/ammar31mawassi/chess-AI">Source on GitHub <span aria-hidden="true">↗</span></a>
+  </header>
+  <main>
+    <div class="intro">
+      <h1>Play the champion</h1>
+      <p>Challenge Scratch, the neural chess engine trained on game positions and Lichess puzzles.</p>
+    </div>
+    <div class="workbench">
+      <section class="board-area" aria-label="Game board">
+        <div id="top-player" class="player"></div>
+        <div id="board" class="board" aria-label="Chessboard"></div>
+        <div id="bottom-player" class="player"></div>
+      </section>
+      <aside class="console" aria-label="Game controls">
+        <section class="panel game-panel">
+          <div class="panel-title"><h2>Game</h2><span class="model">Scratch · Epoch 70</span></div>
+          <p id="status" role="status" aria-live="polite">Loading board…</p>
+          <div class="controls">
+            <label for="side">Play as</label>
+            <select id="side"><option value="white">White</option><option value="black">Black</option></select>
+            <button id="new-game" class="primary" type="button">New game</button>
+            <button id="flip" type="button">Flip board</button>
+            <button id="retry" type="button" hidden>Retry</button>
+          </div>
+        </section>
+        <section class="panel history-panel">
+          <div class="panel-title"><h2>Moves</h2></div>
+          <div class="move-list" id="history">
+            <table><thead><tr><th scope="col">#</th><th scope="col">White</th><th scope="col">Black</th></tr></thead>
+              <tbody id="moves"></tbody>
+            </table>
+            <p id="empty">Moves appear here as you play.</p>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <dialog id="promotion" aria-labelledby="promotion-title">
+    <h2 id="promotion-title">Promote pawn</h2>
+    <form method="dialog">
+      <button value="q">Queen</button><button value="r">Rook</button>
+      <button value="b">Bishop</button><button value="n">Knight</button>
+      <button value="">Cancel</button>
+    </form>
+  </dialog>
+</body>
+</html>
